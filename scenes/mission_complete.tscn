@@ -1,0 +1,61 @@
+[gd_scene label="MissionComplete"]
+
+[node name="MissionComplete" type="Control"]
+anchors_preset = 15
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="MissionComplete/Overlay" type="Panel"]
+anchors_preset = 15
+modulate = Color(0.2, 0.4, 0.2, 0.7)
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="MissionComplete/Panel" type="PanelContainer"]
+anchors_preset = 15
+custom_minimum_size = Vector2( 500, 400 )
+anchor_left = 0.25
+anchor_top = 0.3
+anchor_right = 0.75
+anchor_bottom = 0.7
+
+[node name="MissionComplete/Panel/TitleLabel" type="Label"]
+anchors_preset = 15
+anchor_left = 0.25
+anchor_top = 0.05
+anchor_right = 0.75
+anchor_bottom = 0.15
+text = "MISSION COMPLETE"
+align = 1
+
+[node name="MissionComplete/Panel/ObjectiveLabel" type="Label"]
+anchors_preset = 15
+anchor_left = 0.25
+anchor_top = 0.2
+anchor_right = 0.75
+anchor_bottom = 0.3
+text = "Objective completed!"
+
+[node name="MissionComplete/Panel/RewardLabel" type="Label"]
+anchors_preset = 15
+anchor_left = 0.25
+anchor_top = 0.3
+anchor_right = 0.75
+anchor_bottom = 0.4
+text = "Reward: +100 currency"
+
+[node name="MissionComplete/Panel/ContinueButton" type="Button"]
+anchors_preset = 15
+anchor_left = 0.35
+anchor_top = 0.55
+anchor_right = 0.65
+anchor_bottom = 0.65
+text = "Continue"
+
+[resource]
+resource_name = "MissionComplete"

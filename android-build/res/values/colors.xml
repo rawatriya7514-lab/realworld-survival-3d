@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<color name="color_primary">#6200EE</color>
+	<color name="color_primary_dark">#3700B3</color>
+	<color name="color_accent">#03DAC5</color>
+	<color name="color_health">#FF5252</color>
+	<color name="color_stamina">#FFEB3B</color>
+	<color name="color_ui_bg">#80000000</color>
+	<color name="color_ui_text">#FFFFFFFF</color>
+	<color name="color_sky">#87CEEB</color>
+	<color name="color_grass">#4CAF50</color>
+	<color name="color_ground">#795548</color>
+	<color name="color_enemy">#FF0000</color>
+	<color name="color_item">#00FF00</color>
+</resources>

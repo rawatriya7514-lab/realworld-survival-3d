@@ -1,0 +1,19 @@
+[gd_scene label="Enemy3D"]
+
+[node name="Enemy3D" type="CharacterBody3D"]
+class_name = "Enemy"
+translation = Vector3(5, 0, 5)
+
+[node name="Enemy3D/CollisionShape3D" type="CollisionShape3D"]
+disabled = false
+
+[node name="Enemy3D/Camera3D" type="Camera3D"]
+translation = Vector3(0, 2, 0)
+rotation_degrees = Vector3(-45, 0, 0)
+
+[node name="Enemy3D/MeshInstance3D" type="MeshInstance3D"]
+
+[node name="Enemy3D/AnimationPlayer" type="AnimationPlayer"]
+
+[resource]
+resource_name = "Enemy3D"

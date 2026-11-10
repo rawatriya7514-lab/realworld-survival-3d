@@ -1,0 +1,58 @@
+{
+  "game_title": "RealWorld Survival 3D: Parkour Edition",
+  "version": "2.0.0",
+  "physics": {
+    "gravity": -20.0,
+    "run_speed": 6.5,
+    "sprint_speed": 11.5,
+    "jump_force": 8.8,
+    "wallrun_speed": 12.0,
+    "wallrun_max_duration": 2.2,
+    "vault_speed": 9.5,
+    "slide_speed": 10.5,
+    "roll_impulse": 11.0,
+    "fall_damage_min_height": 5.0,
+    "stamina_max": 100.0,
+    "stamina_sprint_drain": 12.0,
+    "stamina_wallrun_drain": 14.0,
+    "stamina_regen_rate": 18.0
+  },
+  "missions": [
+    {
+      "id": 1,
+      "name": "Rooftop Infiltration",
+      "subtitle": "Traverse the downtown skyline using wall runs and mantling",
+      "target_checkpoint": [65.0, 28.0, 60.0],
+      "required_items": 0,
+      "time_limit": 120.0,
+      "chaser_count": 3
+    },
+    {
+      "id": 2,
+      "name": "Scavenger's High-Rise",
+      "subtitle": "Scavenge 10 energy cores across suspended steel beams",
+      "target_checkpoint": [0.0, 30.0, 0.0],
+      "required_items": 10,
+      "time_limit": 150.0,
+      "chaser_count": 5
+    },
+    {
+      "id": 3,
+      "name": "Industrial Gauntlet",
+      "subtitle": "High-velocity parkour run dodging toxic steam and leaping chasms",
+      "target_checkpoint": [85.0, 35.0, -40.0],
+      "required_items": 5,
+      "time_limit": 90.0,
+      "chaser_count": 6
+    },
+    {
+      "id": 4,
+      "name": "Apex Tower Extraction",
+      "subtitle": "Climb the highest communications tower and signal rescue helicopter",
+      "target_checkpoint": [0.0, 55.0, 90.0],
+      "required_items": 8,
+      "time_limit": 180.0,
+      "chaser_count": 8
+    }
+  ]
+}

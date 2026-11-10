@@ -1,0 +1,92 @@
+; RealWorld Survival 3D - Godot 4.x Project
+; Original game by DevAgent
+
+[application]
+
+config/name="RealWorld Survival 3D"
+config/description="Third-person closed-world survival game. Explore, survive, complete missions."
+config/author="DevAgent"
+config/version="1.0"
+
+run/main_scene="res://scenes/game_menu.tscn"
+
+application/config/features="4.2"
+application/config/display/vsync/vsync_mode=0
+display/window/size/viewport_width=1280
+display/window/size/viewport_height=720
+display/window/stretch/mode=2
+display/window/stretch/aspect=expand
+game_title="REALWORLD SURVIVAL 3D"
+
+[autoload]
+
+GlobalVars="res://scripts/GlobalVars.gd"
+GameState="res://scripts/GameState.gd"
+MissionManager="res://scripts/Missions.gd"
+AudioManager="res://scripts/AudioManager.gd"
+SaveSystem="res://scripts/SaveSystem.gd"
+InteractionSystem="res://scripts/InteractionSystem.gd"
+TouchControls="res://scripts/TouchControls.gd"
+
+[input]
+
+move_forward = { "deadzone": 0.15, "events": [ [0, 16777236], [0, 311] ] }
+move_backward = { "deadzone": 0.15, "events": [ [0, 16777237], [0, 312] ] }
+move_left = { "deadzone": 0.15, "events": [ [0, 16777234], [0, 310] ] }
+move_right = { "deadzone": 0.15, "events": [ [0, 16777235], [0, 313] ] }
+jump = { "deadzone": 0.0, "events": [ [0, 32], [0, 16777249], [0, 16777232] ] }
+sprint = { "deadzone": 0.0, "events": [ [0, 16777248] ] }
+interaction = { "deadzone": 0.0, "events": [ [0, 16777241] ] }
+pause = { "deadzone": 0.0, "events": [ [0, 16777247] ] }
+move_look_x = { "deadzone": 0.15, "events": [ [0, 16777239], [0, 16777238] ] }
+
+[rendering]
+
+renderer/driver/rendering_method=0
+renderer/rendering_method=0
+renderer/fixed_fps/use_run_called=true
+renderer/textures/vram_compression/import_etc1_astc=true
+rendering/renderer/mobile/enabled=true
+rendering/renderer/mobile/environment_texture_size=8
+rendering/renderer/mobile/screen_space_reflection/quality=1
+rendering/renderer/mobile/screen_space_reflection/max_search_distance=64
+rendering/renderer/mobile/physical_light_3d/max_gi_rays=2
+rendering/renderer/mobile/physical_light_3d/max_reflections_per_gi_ray=1
+rendering/renderer/mobile/volumetric_fog/enabled=0
+rendering/environment/background_mode=2
+rendering/ssao/enabled=0
+rendering/sun/enabled=1
+rendering/environment/ambient_light_light_color=Color(0.55, 0.55, 0.55)
+rendering/environment/ambient_light_energy=0.6
+rendering/backward_passes/forward_plus=true
+rendering/directional_shadows/directional_shadow_atlas_size_16=1
+rendering/directional_shadows/shadow_atlas_size_21_16=1
+rendering/directional_shadows/shadow_atlas_size_28_16=0
+rendering/directional_shadows/shadow_atlas_size_16_8=1
+rendering/directional_shadows/shadow_atlas_size_21_8=1
+rendering/directional_shadows/shadow_atlas_size_16_4=0
+rendering/directional_shadows/shadow_atlas_size_21_4=0
+rendering/directional_shadows/shadow_atlas_size_16_2=0
+rendering/directional_shadows/shadow_atlas_size_21_2=0
+rendering/directional_shadows/shadow_atlas_size_32_16=0
+rendering/directional_shadows/shadow_atlas_size_47_16=0
+rendering/directional_shadows/shadow_atlas_size_32_8=0
+rendering/directional_shadows/shadow_atlas_size_47_8=0
+rendering/directional_shadows/shadow_atlas_size_32_4=0
+rendering/directional_shadows/shadow_atlas_size_47_4=0
+rendering/directional_shadows/shadow_atlas_size_32_2=0
+rendering/directional_shadows/shadow_atlas_size_47_2=0
+rendering/textures/default_filters/nearest=false
+rendering/textures/default_filters/bilinear=true
+rendering/textures/default_filters/mipmaps=true
+rendering/textures/import_etc1_astc=true
+rendering/textures/import_s3tc=true
+rendering/texture_filter/anisotropic_filtering=true
+rendering/texture_filter/anisotropic_filtering_level=1
+rendering/texture_filter/bilinear_mipmaps_nearest=true
+rendering/texture_filter/color_mipmaps_enabled=true
+rendering/texture_filter/disable_16_bpc=true
+rendering/texture_filter/hdr_16_bpc=false
+rendering/texture_filter/mipmaps_forced=false
+rendering/texture_filter/use_tiled=false
+rendering/wireframe/enabled=false

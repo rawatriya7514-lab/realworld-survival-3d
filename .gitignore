@@ -1,0 +1,22 @@
+# Android Build outputs
+*.apk
+*.idsig
+*.arsc.flat
+res_compiled/
+dex_out/
+gen/
+obj/
+android-build/obj/
+android-build/dex_out/
+android-build/res_compiled/
+android-build/gen/
+android-build/app_unsigned.apk
+android-build/app_with_dex.apk
+
+# High-capacity audio files (Synthesized via generate_assets.py and packed in Release APK)
+*.wav
+
+# Temp / Cache
+__pycache__/
+*.pyc
+.DS_Store

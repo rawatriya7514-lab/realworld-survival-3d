@@ -1,0 +1,86 @@
+[gd_scene label="res://scenes/game_over.tscn"]
+
+[node name="GameOver" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/padding_left = 16
+theme_override_constants/padding_right = 16
+theme_override_constants/padding_top = 16
+theme_override_constants/padding_bottom = 16
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="ShadowPanel" type="Panel" parent="CanvasLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+modulate = Color(0, 0, 0, 0.6)
+
+[node name="GameOverPanel" type="PanelContainer" parent="CanvasLayer/ShadowPanel"]
+custom_minimum_size = Vector2( 560, 560 )
+anchor_right = 1.0
+anchor_bottom = 1.0
+pos_min = Vector2( -280, -280 )
+pos_max = Vector2( 280, 280 )
+size_flags_horizontal = 1
+size_flags_vertical = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="CanvasLayer/ShadowPanel/GameOverPanel"]
+margin_right = 520.0
+margin_bottom = 408.0
+custom_minimum_size = Vector2( 128, 128 )
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="MenuLabel" type="Label" parent="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer"]
+modulate = Color(1, 1, 1, 1)
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -140.0
+offset_top = -30.0
+offset_right = 140.0
+offset_bottom = 30.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "GAME OVER"
+
+[node name="RetryButton" type="Button" parent="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer"]
+margin_top = 68.0
+margin_right = 280.0
+margin_bottom = 136.0
+text = "Retry"
+label = "Retry"
+theme_override_constants/vertical_margin = 8
+
+[node name="MainMenuButton" type="Button" parent="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer"]
+margin_top = 144.0
+margin_right = 280.0
+margin_bottom = 224.0
+text = "Main Menu"
+label = "Main Menu"
+theme_override_constants/vertical_margin = 8
+
+[node name="HighscoreLabel" type="Label" parent="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -140.0
+offset_top = 32.0
+offset_right = 140.0
+offset_bottom = 52.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Highscore: 0"
+
+[connection signal="pressed" from="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer/RetryButton" to="." method="_on_retry"]
+[connection signal="pressed" from="CanvasLayer/ShadowPanel/GameOverPanel/MarginContainer/MainMenuButton" to="." method="_on_main_menu"]
+
+[resource]
+high_score = 0

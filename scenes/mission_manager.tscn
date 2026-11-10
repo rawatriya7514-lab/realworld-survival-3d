@@ -1,0 +1,20 @@
+[gd_scene label="MissionManager"]
+
+[node name="MissionManager" type="Node3D"]
+
+[node name="MissionManager/MissionLabel" type="Label3D"]
+translation = Vector3(0, 4, 0)
+text = "Mission: None"
+billboard_mode = 3
+
+[node name="MissionManager/MissionProgressBar" type="ProgressBar3D"]
+translation = Vector3(0, 3.5, 0)
+
+[node name="MissionManager/InteractionPrompt" type="Label3D"]
+translation = Vector3(0, 5, 0)
+text = "Press E to interact"
+billboard_mode = 3
+
+[resource]
+resource_name = "MissionManager"
+external_path = "res://scenes/mission_manager.tscn"
