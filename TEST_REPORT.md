@@ -391,3 +391,46 @@ Defects found & fixed during this phase (real, encountered while testing):
    to `GraphicsPreset.LOW` and `QUALITY_HIGH` to `GraphicsPreset.HIGH`.
 2. `Obstacle` lacked a 3D point containment query (`contains(px, py, pz)`) → implemented
    exact AABB `contains` method in `Obstacle.java`.
+
+## Phase 8 — AI Entities & Staggered Performance Updates (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI + 10 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Total JVM test suite | **PASS** — 2,863 checks, 0 failures | Zero regressions across all 10 test suites |
+| Full Android compile (all 30 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,052,750 bytes | step [6/6] + apksigner output |
+| On-device runtime (NPC talk, hostile chase) | **NOT TESTED** | No adb in environment; physical install pending |
+
+AITest groups (56 checks):
+1. **CivilianNPC basics & dialogue cycling**: Name, role, home position; dialogue cycling wraps back around.
+2. **CivilianNPC proximity conversation & patrol**: Proximity talk trigger <= 2.5m; stops moving to face player; returns to patrol on player departure; wander remains bounded near home zone.
+3. **CivilianNPC staggered AI throttling**: <40m runs every frame; 40-100m runs on frame % 5 == 0; >100m frozen.
+4. **HostileAI detection & pursuit state machine**: PATROL -> ALERT (24m) -> CHASE; moves closer during pursuit; returns to PATROL when player retreats > 35m.
+5. **HostileAI Central Plaza safe zone repulsion**: Outward push when approaching safe haven buffer (<34m); stops pursuit when player enters safe haven.
+6. **HostileAI player combat interactions**: Stalker attack deals 15 dmg with 1.2s cooldown; slide tackle deals 35 dmg and 2.0s stun; drop stomp from above instantly defeats stalker and bounces runner (+150 score).
+7. **HostileAI staggered AI throttling**: <40m runs every frame; 40-100m runs on frame % 5 == 0; >100m frozen.
+8. **HunterEnemy articulated limb animator**: Articulated animator rig replaces single-box legacy model across patrol, chase, leaping, and defeat.
+9. **OpenWorld NPC roster & queries**: Populates 6 distinct civilians and 9 hostiles; nearest civilian proximity spatial queries.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. `CharacterAnimator.update` takes 4 arguments `(dt, state, horizSpeed, isGrounded)` but `CivilianNPC` initially passed 5 arguments → fixed call signature across all NPC states.
+2. `Player.ParkourState` has `VAULTING` rather than `VAULT_LOW` → fixed hostile and chaser animation state mapping.
+3. `HostileAI.java` had combat interaction resolution after the `stunTimer > 0f` check, preventing followup slide tackles or drop stomps while enemies were stunned → moved `resolvePlayerInteractions` before stun return.

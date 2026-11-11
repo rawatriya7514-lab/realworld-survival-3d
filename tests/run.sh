@@ -25,6 +25,8 @@ javac -Xlint:-options -d "$OUT" \
     "$S/MapViewController.java" \
     "$S/DayNightCycle.java" \
     "$S/BuildingInterior.java" \
+    "$S/CivilianNPC.java" \
+    "$S/HostileAI.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
@@ -33,7 +35,8 @@ javac -Xlint:-options -d "$OUT" \
     "$ROOT/tests/TouchLayoutTest.java" \
     "$ROOT/tests/RoadNetworkTest.java" \
     "$ROOT/tests/MapTest.java" \
-    "$ROOT/tests/EnvironmentTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/EnvironmentTest.java" \
+    "$ROOT/tests/AITest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -44,3 +47,4 @@ java -cp "$OUT" TouchLayoutTest
 java -cp "$OUT" RoadNetworkTest
 java -cp "$OUT" MapTest
 java -cp "$OUT" EnvironmentTest
+java -cp "$OUT" AITest

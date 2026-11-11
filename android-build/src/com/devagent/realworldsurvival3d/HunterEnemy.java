@@ -43,6 +43,9 @@ public class HunterEnemy {
     public float stunTimer = 0f;
     public boolean alertSoundPlayed = false;
 
+    // Articulated limb animator (Phase 8)
+    public final CharacterAnimator animator = new CharacterAnimator();
+
     // Roof/leap bookkeeping
     private static final float GRAVITY = -22f;
     private static final float LEAP_RANGE = 9.0f;
@@ -66,7 +69,10 @@ public class HunterEnemy {
     // Main update
     // =================================================================
     public void update(float dt, Player player, WorldMap world) {
-        if (state == State.DEFEATED) return;
+        if (state == State.DEFEATED) {
+            animator.update(dt, Player.ParkourState.DEAD, 0f, true);
+            return;
+        }
         List<Obstacle> obstacles = world.obstacles;
 
         if (attackCooldown > 0f) attackCooldown -= dt;
@@ -142,6 +148,29 @@ public class HunterEnemy {
                     vy = 0f;
                     break;
                 }
+            }
+        }
+
+        updateAnimation(dt);
+    }
+
+    private void updateAnimation(float dt) {
+        if (state == State.DEFEATED) {
+            animator.update(dt, Player.ParkourState.DEAD, 0f, true);
+        } else if (state == State.STUNNED) {
+            animator.update(dt, Player.ParkourState.STAND, 0f, true);
+        } else if (state == State.LEAPING) {
+            animator.update(dt, Player.ParkourState.JUMP, 10f, false);
+        } else if (state == State.CHASING) {
+            animator.update(dt, Player.ParkourState.RUN, chaseSpeed, true);
+        } else if (state == State.ATTACKING) {
+            animator.update(dt, Player.ParkourState.VAULTING, chaseSpeed, true);
+        } else {
+            float hSpeed = (float) Math.sqrt(vx * vx + vz * vz);
+            if (hSpeed > 0.4f) {
+                animator.update(dt, Player.ParkourState.WALK, hSpeed, true);
+            } else {
+                animator.update(dt, Player.ParkourState.STAND, 0f, true);
             }
         }
     }

@@ -59,6 +59,11 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     public final MapViewController mapController = new MapViewController();
     public boolean mapOverlayVisible = false;
 
+    // Phase 8: AI Entities & Staggered updates
+    private int openWorldFrameCount = 0;
+    private String activeDialogue = null;
+    private float dialogueTimer = 0f;
+
     // Phase 7: Environment (8-min Day/Night cycle, weather-lite & presets)
     public final DayNightCycle dayNight = new DayNightCycle();
 
@@ -365,6 +370,39 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         // Advance 8-minute Day/Night simulation
         dayNight.update(dt);
 
+        openWorldFrameCount++;
+
+        // Dialogue timer decay
+        if (dialogueTimer > 0f) {
+            dialogueTimer -= dt;
+            if (dialogueTimer <= 0f) activeDialogue = null;
+        }
+
+        // Update Civilian NPCs with performance-budget staggered throttling
+        for (CivilianNPC npc : openWorld.civilians) {
+            npc.update(dt, player.x, player.y, player.z, openWorldFrameCount);
+        }
+
+        // Proximity talk detection with civilians
+        CivilianNPC nearbyCivilian = openWorld.nearestCivilian(player.x, player.z, 2.6f);
+        if (nearbyCivilian != null) {
+            touchInput.interactVisible = true;
+            if (touchInput.interactPressed) {
+                String speech = nearbyCivilian.interact();
+                activeDialogue = nearbyCivilian.name + " (" + nearbyCivilian.role + "): \"" + speech + "\"";
+                dialogueTimer = 4.5f;
+                vibrate(20);
+                touchInput.interactPressed = false;
+            }
+        } else {
+            touchInput.interactVisible = false;
+        }
+
+        // Update Hostiles with performance-budget staggered throttling
+        for (HostileAI hostile : openWorld.hostiles) {
+            hostile.update(dt, player, openWorld, openWorldFrameCount);
+        }
+
         if (ui != null) {
             String goal = missionGoal;
             if (navigationTracker.hasActiveWaypoint) {
@@ -375,7 +413,11 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             ui.setHudStats(dayNight.getTimeString() + "   Region: " + OpenWorld.regionAt(player.x, player.z).display
                     + "   Score " + player.score);
             String prompt = toastTimer > 0f ? toastMessage : null;
-            if (prompt == null && player.actionNotifyTimer > 0f) {
+            if (prompt == null && activeDialogue != null) {
+                prompt = activeDialogue;
+            } else if (prompt == null && nearbyCivilian != null) {
+                prompt = "Talk to " + nearbyCivilian.name;
+            } else if (prompt == null && player.actionNotifyTimer > 0f) {
                 prompt = player.lastParkourAction;
             }
             ui.setHudPrompt(prompt);

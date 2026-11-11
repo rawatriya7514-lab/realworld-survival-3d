@@ -120,6 +120,8 @@ public class OpenWorld {
     // Chunk streaming
     // ------------------------------------------------------------------
     public final BuildingInterior buildingInterior = new BuildingInterior();
+    public final List<CivilianNPC> civilians = new ArrayList<>();
+    public final List<HostileAI> hostiles = new ArrayList<>();
     private final HashMap<Long, List<Obstacle>> chunkCache = new HashMap<>();
     private final List<Obstacle> global = new ArrayList<>(); // bridge + pier
     private final List<Obstacle> active = new ArrayList<>();
@@ -128,6 +130,66 @@ public class OpenWorld {
     public OpenWorld() {
         buildPois();
         buildGlobalStructures();
+        buildEntities();
+    }
+
+    private void buildEntities() {
+        // Civilians
+        civilians.add(new CivilianNPC("Maya", "Survivor Scout", 146f, 18f, 6.0f, new String[]{
+                "The signal from the north ridge... someone is transmitting.",
+                "If you're heading out, stay on the roads. The infected stay in the ruins.",
+                "Welcome to Central Plaza. You're safe here."
+        }));
+        civilians.add(new CivilianNPC("Goran", "Quartermaster", 154f, 22f, 5.0f, new String[]{
+                "Need supplies? Check the Safehouse to the east.",
+                "Watch your stamina when sprinting through the marshes.",
+                "Keep your eyes open, runner."
+        }));
+        civilians.add(new CivilianNPC("Elena", "Radio Technician", 148f, 26f, 5.0f, new String[]{
+                "The old bridge holds, but the west woods are crawling with stalkers.",
+                "I heard the radio relay tower at 240, -300 was tripped yesterday.",
+                "Stock up before you cross the river."
+        }));
+        civilians.add(new CivilianNPC("Jack", "Scavenger", 212f, 62f, 4.0f, new String[]{
+                "Safehouse is secure. Rest up if you need to.",
+                "There's fresh water in the crates by the bench.",
+                "Don't let them corner you in the dark."
+        }));
+        civilians.add(new CivilianNPC("Old Miller", "Elder Fisherman", -185f, 238f, 8.0f, new String[]{
+                "The river mist gets heavy near dawn. Mind your footing on the planks.",
+                "Fishermen used to thrive here before the outbreak.",
+                "If you seek the Ranger, take the high road west."
+        }));
+        civilians.add(new CivilianNPC("Ranger Thorne", "Forest Watcher", -328f, 58f, 5.0f, new String[]{
+                "Forest is quiet today. Too quiet.",
+                "The relay masts on the north ridge need recalibration.",
+                "Keep that parkour sharp. Only way to outrun the stalkers."
+        }));
+
+        // Hostiles in wild / ruin zones (never inside Central Plaza safe zone)
+        hostiles.add(new HostileAI("Infected Stalker", 300f, 150f, 25.0f));
+        hostiles.add(new HostileAI("Infected Runner", 260f, 200f, 20.0f));
+        hostiles.add(new HostileAI("Infected Stalker", 180f, 300f, 25.0f));
+        hostiles.add(new HostileAI("Canyon Lurker", -80f, 180f, 20.0f));
+        hostiles.add(new HostileAI("Infected Runner", -120f, 150f, 25.0f));
+        hostiles.add(new HostileAI("Ridge Stalker", 100f, -280f, 25.0f));
+        hostiles.add(new HostileAI("North Prowler", 160f, -320f, 25.0f));
+        hostiles.add(new HostileAI("Docks Infected", -160f, 310f, 20.0f));
+        hostiles.add(new HostileAI("Docks Lurker", -140f, 325f, 20.0f));
+    }
+
+    public CivilianNPC nearestCivilian(float px, float pz, float maxDist) {
+        CivilianNPC best = null;
+        float bestSq = maxDist * maxDist;
+        for (CivilianNPC c : civilians) {
+            float dx = px - c.x, dz = pz - c.z;
+            float sq = dx * dx + dz * dz;
+            if (sq < bestSq) {
+                bestSq = sq;
+                best = c;
+            }
+        }
+        return best;
     }
 
     private void buildPois() {

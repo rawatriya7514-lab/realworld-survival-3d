@@ -746,11 +746,55 @@ public class WorldRenderer {
                 if (ch.state != HunterEnemy.State.DEFEATED) {
                     float face = (ch.vx != 0f || ch.vz != 0f)
                             ? (float) Math.toDegrees(Math.atan2(ch.vx, -ch.vz)) : 0f;
-                    drawCharacter(ch.x, ch.y, ch.z, face, 0.8f, 1.7f, 0.8f, TEX_CHASER,
-                            0.85f, 0.3f, 0.3f);
+                    if (ch.animator != null && ch.animator.currentPose != null) {
+                        drawAnimatedCharacter(ch.x, ch.y, ch.z, face, ch.animator.currentPose,
+                                TEX_CHASER, 0.85f, 0.25f, 0.25f);
+                    } else {
+                        drawCharacter(ch.x, ch.y, ch.z, face, 0.8f, 1.7f, 0.8f, TEX_CHASER,
+                                0.85f, 0.3f, 0.3f);
+                    }
                     // glowing visor
                     drawCube(ch.x, ch.y + 1.35f, ch.z, face, 0.34f, 0.12f, 0.2f, TEX_NEON,
                             1f, 0.15f, 0.05f, 1f, 1f, 1f, 0.5f, 1f);
+                }
+            }
+        }
+
+        // Characters: Open-World Civilian NPCs & Hostiles (Phase 8)
+        if (openWorld != null) {
+            if (openWorld.civilians != null) {
+                for (CivilianNPC npc : openWorld.civilians) {
+                    if (npc.wasFrozen) continue;
+                    float tr = 0.35f, tg = 0.65f, tb = 0.85f;
+                    if ("Maya".equals(npc.name)) { tr = 0.25f; tg = 0.70f; tb = 0.90f; }
+                    else if ("Goran".equals(npc.name)) { tr = 0.85f; tg = 0.55f; tb = 0.20f; }
+                    else if ("Elena".equals(npc.name)) { tr = 0.90f; tg = 0.40f; tb = 0.60f; }
+                    else if ("Jack".equals(npc.name)) { tr = 0.30f; tg = 0.80f; tb = 0.50f; }
+                    else if ("Old Miller".equals(npc.name)) { tr = 0.75f; tg = 0.65f; tb = 0.45f; }
+                    else if ("Ranger Thorne".equals(npc.name)) { tr = 0.25f; tg = 0.60f; tb = 0.30f; }
+
+                    if (npc.animator != null && npc.animator.currentPose != null) {
+                        drawAnimatedCharacter(npc.x, npc.y, npc.z, npc.yaw,
+                                npc.animator.currentPose, TEX_RUNNER, tr, tg, tb);
+                    } else {
+                        drawCharacter(npc.x, npc.y, npc.z, npc.yaw, 0.75f, 1.7f, 0.75f,
+                                TEX_RUNNER, tr, tg, tb);
+                    }
+                }
+            }
+            if (openWorld.hostiles != null) {
+                for (HostileAI h : openWorld.hostiles) {
+                    if (h.wasFrozen || h.state == HostileAI.State.DEFEATED) continue;
+                    if (h.animator != null && h.animator.currentPose != null) {
+                        drawAnimatedCharacter(h.x, h.y, h.z, h.yaw,
+                                h.animator.currentPose, TEX_CHASER, 0.80f, 0.15f, 0.15f);
+                    } else {
+                        drawCharacter(h.x, h.y, h.z, h.yaw, 0.8f, 1.7f, 0.8f,
+                                TEX_CHASER, 0.80f, 0.15f, 0.15f);
+                    }
+                    // glowing red stalker visor/eyes
+                    drawCube(h.x, h.y + 1.35f, h.z, h.yaw, 0.32f, 0.12f, 0.2f, TEX_NEON,
+                            1f, 0.05f, 0.02f, 1f, 1f, 1f, 0.5f, 1f);
                 }
             }
         }
@@ -788,6 +832,22 @@ public class WorldRenderer {
                 for (HunterEnemy ch : chasers) {
                     if (ch.state != HunterEnemy.State.DEFEATED) {
                         drawShadow(worldMap, ch.x, ch.z, ch.y, 0.55f, 0.30f);
+                    }
+                }
+            }
+            if (openWorld != null) {
+                if (openWorld.civilians != null) {
+                    for (CivilianNPC npc : openWorld.civilians) {
+                        if (!npc.wasFrozen) {
+                            drawShadowOpen(openWorld, npc.x, npc.z, npc.y, 0.50f, 0.25f);
+                        }
+                    }
+                }
+                if (openWorld.hostiles != null) {
+                    for (HostileAI h : openWorld.hostiles) {
+                        if (!h.wasFrozen && h.state != HostileAI.State.DEFEATED) {
+                            drawShadowOpen(openWorld, h.x, h.z, h.y, 0.55f, 0.30f);
+                        }
                     }
                 }
             }

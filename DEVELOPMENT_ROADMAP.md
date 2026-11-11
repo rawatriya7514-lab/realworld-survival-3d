@@ -332,8 +332,56 @@ Test results (real, this session):
 Known phase-7 limitations (tracked, see KNOWN_ISSUES.md):
 - HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 8 — AI — PLANNED
-- Civilian NPCs + hostile zones with staggered updates.
+### PHASE 8 — AI (2026-11-11) — DONE
+Scope: Civilian NPCs with dialogue interaction and home patrol bounds, Hostile AI
+stalkers in open-world ruin zones, safe haven repulsion boundary around Central Plaza,
+staggered AI updates for mid-range arm64 performance budget, combat resolutions
+(stomp from above, slide tackle stun, enemy strike), and articulated procedural limb
+animation for all humanoid entities (including campaign HunterEnemy).
+
+What was built (all original code):
+- `CivilianNPC.java` (new, pure Java): autonomous survivor entity with state machine
+  (IDLE, PATROL, TALKING, FLEEING); proximity talk detection within 2.5m facing player;
+  conversational dialogue cycling with talk cooldown; home-zone bounded patrol wander;
+  staggered AI throttling (<40m every frame, 40-100m every 5th frame with 5x dt, >100m frozen);
+  articulated `CharacterAnimator` walk/stand poses.
+- `HostileAI.java` (new, pure Java): autonomous infected stalker with state machine
+  (PATROL, ALERT, CHASE, ATTACK, STUNNED, DEFEATED); pursuit range (24m detection, 35m drop);
+  Central Plaza safe haven repulsion (< 34m outward push, disengages pursuit);
+  staggered AI throttling (<40m every frame, 40-100m every 5th frame, >100m frozen);
+  player combat interactions (drop stomp elimination bouncing runner upwards +150 score,
+  slide tackle deal 35 dmg and 2.0s stun, hostile attack deal 15 dmg with 1.2s cooldown);
+  articulated `CharacterAnimator` gaits.
+- `HunterEnemy.java` updates: integrates articulated `CharacterAnimator` rig across
+  PATROL, CHASING, LEAPING, ATTACKING, STUNNED, and DEFEATED states, eliminating the
+  legacy single-cube limitation.
+- `OpenWorld.java` updates: populates 6 distinct Civilian NPCs (Maya, Goran, Elena at
+  Central Plaza; Jack at Safehouse; Old Miller at Riverside Village; Ranger Thorne at
+  Ranger Hut) with narrative dialogue lore; populates 9 Hostile AIs in Outskirts,
+  River Canyon approach, North Hills pass, and Old Docks; adds `nearestCivilian` query.
+- `WorldRenderer.java` updates: renders articulated composite models (`drawAnimatedCharacter`)
+  for campaign chasers, open-world civilians (individual wardrobe color themes), and
+  hostiles (crimson armor + glowing red stalker visors); dynamic blob shadows for all
+  active AI entities.
+- `GameView.java` updates: advances open-world frame counter for staggered AI updates;
+  contextual touch `interactVisible` trigger when within 2.6m of an NPC; tap interact button
+  to converse with subtitles/dialogue overlay; updates all civilians and hostiles.
+- Tests: `tests/AITest.java` (9 groups, 56 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**. Total: **2,863 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 30 classes).
+- APK: built, 22,052,750 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2863/0.
+
+Known phase-8 limitations (tracked, see KNOWN_ISSUES.md):
+- Mission progression currently Free Roam only ("The Long Signal" storyline planned for Phase 9).
+
 ### PHASE 9 — Missions — PLANNED
 - "The Long Signal" 6-mission story + side objectives, rewards, failure.
 ### PHASE 10 — Inventory + vehicles — PLANNED

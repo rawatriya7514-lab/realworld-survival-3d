@@ -40,11 +40,16 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 5)
-1. **HunterEnemy uses single-box model** — HunterEnemy is rendered with single-cube
-   body + glowing visor; full enemy animation rig planned for Phase 8 AI.
+## Open issues (Phase 8)
+1. **Story mission storyline** — Story missions "The Long Signal" (6 sequential quests)
+   are planned for Phase 9.
 
 ## Resolved during development
+- PHASE 8: HunterEnemy and HostileAI articulated limb animation rigs, eliminating
+  the legacy single-box enemy placeholder; Civilian NPCs with conversational
+  dialogue cycles and proximity prompts; Central Plaza safe haven repulsion boundary
+  (34m buffer prevents infected from invading safe zones); performance budget
+  staggered AI updates (<40m every frame, 40-100m 5th-frame 5x dt, >100m frozen).
 - PHASE 1: flat-channel trap on entering deep water (strictly-deeper rule),
   1 cm/frame creep epsilon, bridge-corridor approach flatten coverage
   (±85 m), leftover `considerFloor` stub, private `Terrain` constructor,
