@@ -122,6 +122,7 @@ public class OpenWorld {
     public final BuildingInterior buildingInterior = new BuildingInterior();
     public final List<CivilianNPC> civilians = new ArrayList<>();
     public final List<HostileAI> hostiles = new ArrayList<>();
+    public final List<Vehicle> vehicles = new ArrayList<>();
     private final HashMap<Long, List<Obstacle>> chunkCache = new HashMap<>();
     private final List<Obstacle> global = new ArrayList<>(); // bridge + pier
     private final List<Obstacle> active = new ArrayList<>();
@@ -176,6 +177,11 @@ public class OpenWorld {
         hostiles.add(new HostileAI("North Prowler", 160f, -320f, 25.0f));
         hostiles.add(new HostileAI("Docks Infected", -160f, 310f, 20.0f));
         hostiles.add(new HostileAI("Docks Lurker", -140f, 325f, 20.0f));
+
+        // Drivable vehicles (Phase 10)
+        vehicles.add(new Vehicle(Vehicle.Type.SUV, "Scout SUV", 60f, 40f, 0f));             // Garage
+        vehicles.add(new Vehicle(Vehicle.Type.MOTORCYCLE, "Trail Bike", 215f, 52f, 90f));   // Safehouse
+        vehicles.add(new Vehicle(Vehicle.Type.SUV, "Village SUV", -180f, 230f, 180f));      // Riverside Village
     }
 
     public CivilianNPC nearestCivilian(float px, float pz, float maxDist) {
@@ -187,6 +193,20 @@ public class OpenWorld {
             if (sq < bestSq) {
                 bestSq = sq;
                 best = c;
+            }
+        }
+        return best;
+    }
+
+    public Vehicle nearestVehicle(float px, float pz, float maxDist) {
+        Vehicle best = null;
+        float bestSq = maxDist * maxDist;
+        for (Vehicle v : vehicles) {
+            float dx = px - v.x, dz = pz - v.z;
+            float sq = dx * dx + dz * dz;
+            if (sq < bestSq) {
+                bestSq = sq;
+                best = v;
             }
         }
         return best;

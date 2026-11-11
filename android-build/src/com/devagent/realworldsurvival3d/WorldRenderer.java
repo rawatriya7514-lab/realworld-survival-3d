@@ -806,6 +806,11 @@ public class WorldRenderer {
                             1f, 0.05f, 0.02f, 1f, 1f, 1f, 0.5f, 1f);
                 }
             }
+            if (openWorld.vehicles != null) {
+                for (Vehicle v : openWorld.vehicles) {
+                    drawVehicle(v);
+                }
+            }
         }
 
         if (!player.firstPersonView && player.state != Player.ParkourState.DEAD) {
@@ -857,6 +862,12 @@ public class WorldRenderer {
                         if (!h.wasFrozen && h.state != HostileAI.State.DEFEATED) {
                             drawShadowOpen(openWorld, h.x, h.z, h.y, 0.55f, 0.30f);
                         }
+                    }
+                }
+                if (openWorld.vehicles != null) {
+                    for (Vehicle v : openWorld.vehicles) {
+                        float vr = (v.type == Vehicle.Type.SUV) ? 1.5f : 0.85f;
+                        drawShadowOpen(openWorld, v.x, v.z, v.y, vr, 0.35f);
                     }
                 }
             }
@@ -1084,6 +1095,64 @@ public class WorldRenderer {
         float pulse = 0.75f + 0.25f * (float) Math.sin(item.rotation * 2.0);
         drawCube(item.x, item.y + item.bobOffset + 0.6f, item.z, item.rotation,
                 0.6f, 0.6f, 0.6f, TEX_NEON, r, g, b, 1f, 1f, 1f, 1.0f, pulse);
+    }
+
+    private void drawVehicle(Vehicle v) {
+        float rad = (float) Math.toRadians(v.yaw);
+        float fwdX = (float) Math.sin(rad), fwdZ = -(float) Math.cos(rad);
+        float rightX = (float) Math.cos(rad), rightZ = (float) Math.sin(rad);
+
+        if (v.type == Vehicle.Type.SUV) {
+            // Main SUV Body
+            drawCube(v.x, v.y + 0.60f, v.z, v.yaw, 2.0f, 0.65f, 4.0f,
+                    TEX_CONCRETE, 0.22f, 0.38f, 0.65f, 1f, 1f, 1f, 0.3f, 1f);
+            // Cabin / windows
+            drawCube(v.x, v.y + 1.25f, v.z - 0.2f, v.yaw, 1.7f, 0.65f, 2.2f,
+                    TEX_ROOF, 0.15f, 0.22f, 0.30f, 1f, 1f, 1f, 0.6f, 1f);
+            // Wheels
+            float[][] wheelOffsets = {
+                    {0.95f, 1.3f},   // front-right
+                    {-0.95f, 1.3f},  // front-left
+                    {0.95f, -1.3f},  // rear-right
+                    {-0.95f, -1.3f}  // rear-left
+            };
+            for (float[] off : wheelOffsets) {
+                float wx = v.x + rightX * off[0] + fwdX * off[1];
+                float wz = v.z + rightZ * off[0] + fwdZ * off[1];
+                drawCube(wx, v.y + 0.32f, wz, v.yaw, 0.38f, 0.64f, 0.64f,
+                        TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
+            }
+            // Headlights
+            if (v.headlightsOn) {
+                float h1x = v.x + rightX * 0.7f + fwdX * 2.05f;
+                float h1z = v.z + rightZ * 0.7f + fwdZ * 2.05f;
+                float h2x = v.x - rightX * 0.7f + fwdX * 2.05f;
+                float h2z = v.z - rightZ * 0.7f + fwdZ * 2.05f;
+                drawCube(h1x, v.y + 0.65f, h1z, v.yaw, 0.35f, 0.16f, 0.12f,
+                        TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
+                drawCube(h2x, v.y + 0.65f, h2z, v.yaw, 0.35f, 0.16f, 0.12f,
+                        TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
+            }
+        } else {
+            // Motorcycle Frame
+            drawCube(v.x, v.y + 0.55f, v.z, v.yaw, 0.55f, 0.50f, 1.8f,
+                    TEX_CONCRETE, 0.90f, 0.38f, 0.12f, 1f, 1f, 1f, 0.4f, 1f);
+            // Handlebars
+            drawCube(v.x, v.y + 0.95f, v.z + 0.45f, v.yaw, 0.80f, 0.12f, 0.15f,
+                    TEX_RUST, 0.20f, 0.20f, 0.20f, 1f, 1f, 1f, 0.2f, 1f);
+            // Wheels
+            float rad2 = (float) Math.toRadians(v.yaw);
+            float fwdX2 = (float) Math.sin(rad2), fwdZ2 = -(float) Math.cos(rad2);
+            drawCube(v.x + fwdX2 * 0.85f, v.y + 0.32f, v.z + fwdZ2 * 0.85f, v.yaw,
+                    0.25f, 0.64f, 0.64f, TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
+            drawCube(v.x - fwdX2 * 0.85f, v.y + 0.32f, v.z - fwdZ2 * 0.85f, v.yaw,
+                    0.25f, 0.64f, 0.64f, TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
+            // Headlight
+            if (v.headlightsOn) {
+                drawCube(v.x + fwdX2 * 1.0f, v.y + 0.75f, v.z + fwdZ2 * 1.0f, v.yaw,
+                        0.25f, 0.20f, 0.12f, TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
+            }
+        }
     }
 
     private void drawCharacter(float x, float y, float z, float yawDeg,

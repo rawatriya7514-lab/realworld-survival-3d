@@ -68,6 +68,10 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     public final MissionManager missionManager = new MissionManager();
     private final List<Item> openWorldItems = new ArrayList<>();
 
+    // Phase 10: Inventory & Vehicles
+    public final Inventory inventory = new Inventory();
+    public Vehicle activeVehicle = null;
+
     // Phase 7: Environment (8-min Day/Night cycle, weather-lite & presets)
     public final DayNightCycle dayNight = new DayNightCycle();
 
@@ -337,9 +341,54 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
 
         openWorld.recomputeActive(player.x, player.z);
-        player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
-                touchInput.slidePressed, touchInput.sprintToggled, touchInput.crouchToggled,
-                openWorld.activeObstacles());
+
+        // Vehicle driving or foot locomotion
+        Vehicle nearbyVehicle = null;
+        if (activeVehicle != null) {
+            // Driving active vehicle
+            activeVehicle.update(dt, touchInput.moveY, touchInput.moveX,
+                    touchInput.slidePressed || touchInput.crouchToggled, openWorld, player);
+            player.yaw = -activeVehicle.yaw;
+            touchInput.interactVisible = true;
+
+            // Exit vehicle check
+            if (touchInput.interactPressed) {
+                String vName = activeVehicle.name;
+                activeVehicle.exit(player, openWorld);
+                activeVehicle = null;
+                toastMessage = "Exited " + vName;
+                toastTimer = 2.0f;
+                touchInput.interactPressed = false;
+                vibrate(25);
+            }
+        } else {
+            // Foot player movement
+            player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
+                    touchInput.slidePressed, touchInput.sprintToggled, touchInput.crouchToggled,
+                    openWorld.activeObstacles());
+
+            // Check if near an unoccupied vehicle
+            nearbyVehicle = openWorld.nearestVehicle(player.x, player.z, 3.2f);
+            if (nearbyVehicle != null && !nearbyVehicle.isOccupied) {
+                touchInput.interactVisible = true;
+                if (touchInput.interactPressed) {
+                    if (nearbyVehicle.enter(player)) {
+                        activeVehicle = nearbyVehicle;
+                        toastMessage = "Driving " + nearbyVehicle.name;
+                        toastTimer = 2.0f;
+                        touchInput.interactPressed = false;
+                        vibrate(30);
+                    }
+                }
+            }
+        }
+
+        // Update all other vehicles
+        for (Vehicle v : openWorld.vehicles) {
+            if (v != activeVehicle) {
+                v.update(dt, 0f, 0f, false, openWorld, null);
+            }
+        }
 
         // Update navigation tracker progression and auto-rerouting
         navigationTracker.update(player.x, player.z);
@@ -436,10 +485,14 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             ui.setHudStats(dayNight.getTimeString() + "   Region: " + OpenWorld.regionAt(player.x, player.z).display
                     + "   Score " + player.score);
             String prompt = toastTimer > 0f ? toastMessage : null;
-            if (prompt == null && activeDialogue != null) {
+            if (prompt == null && activeVehicle != null) {
+                prompt = "Driving " + activeVehicle.name + " (" + (int) Math.abs(activeVehicle.speed) + " m/s)   [INTERACT] Exit";
+            } else if (prompt == null && activeDialogue != null) {
                 prompt = activeDialogue;
             } else if (prompt == null && nearbyCivilian != null) {
                 prompt = "Talk to " + nearbyCivilian.name;
+            } else if (prompt == null && nearbyVehicle != null) {
+                prompt = "Enter " + nearbyVehicle.name;
             } else if (prompt == null && player.actionNotifyTimer > 0f) {
                 prompt = player.lastParkourAction;
             }

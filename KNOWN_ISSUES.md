@@ -40,11 +40,15 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 9)
-1. **Backpack Inventory & Drivable Vehicles** — Dedicated backpack grid UI, usable
-   medkits/consumables, and car/motorcycle vehicle driving physics planned for Phase 10.
+## Open issues (Phase 10)
+1. **Audio & Graphics Settings Sliders** — Master/Music/SFX volume sliders with linear gain control, vehicle engine rumble and horn sound triggers, and graphics toggles (bloom/shadows) planned for Phase 11.
 
 ## Resolved during development
+- PHASE 10: 12-slot backpack inventory (`Inventory.java`) with item stacking and consumable
+  survival effects (medkit healing, energy drink stamina/adrenaline boosts), drivable land
+  vehicles (`Vehicle.java`) for Scout SUV and Trail Bike Motorcycle with acceleration, braking,
+  reverse, handbrake drift, obstacle collision rebound, hostile roadkill ramming, and 3D
+  composite vehicle rendering in `WorldRenderer.java`.
 - PHASE 9: "The Long Signal" 6-mission story arc with interactive objectives (locations,
   radio part salvage, NPC dialogue, elevation check, wave defense, transmission finale),
   5 hidden data slates across world landmarks, auto-waypoint synchronization, and

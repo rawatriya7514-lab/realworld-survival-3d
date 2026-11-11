@@ -429,9 +429,56 @@ Test results (real, this session):
 Known phase-9 limitations (tracked, see KNOWN_ISSUES.md):
 - Dedicated backpack inventory and drivable vehicles planned for Phase 10.
 
-### PHASE 10 — Inventory + vehicles — PLANNED
-- Inventory system (medkits, stamina boosters, parts, keys) + car/motorcycle vehicle physics.
+### PHASE 10 — Inventory + vehicles (2026-11-11) — DONE
+Scope: 12-slot backpack inventory with item stacking and consumable survival items
+(medkits, energy drinks), drivable land vehicles (Scout SUV and Trail Bike Motorcycle)
+with realistic acceleration/braking/reverse/steering/handbrake drift physics,
+terrain surface tracking, solid obstacle AABB impact damage and rebound, high-speed
+hostile roadkill ramming damage and knockback, enter/exit vehicle transitions,
+and 3D composite vehicle rendering.
+
+What was built (all original code):
+- `Inventory.java` (new, pure Java): 12-slot backpack storage engine; item stacking
+  (Medkits & Energy Drinks up to 5, Tokens & Drives up to 20, Radio Parts up to 4,
+  Data Slates up to 5); usable survival consumables applying instant player effects
+  (Medkit heals +45 HP up to 100 max, Energy Drink refills 100 stamina and grants
+  +30 adrenaline boost); intelligent safety checks (prevents wasteful consumption
+  at 100% full stats; protects quest items like Radio Parts from accidental ingestion);
+  full inventory capacity limits.
+- `Vehicle.java` (new, pure Java): drivable land vehicle physics for Scout SUV
+  (max 22 m/s, 220 HP, 4.2x2.0m) and Trail Bike Motorcycle (max 28 m/s, 110 HP, 2.2x0.9m);
+  forward acceleration, braking, reverse (-7.5 m/s max), handbrake drift deceleration,
+  and velocity-proportional steering (`turnFactor = min(1.0, |speed| / 4.0)` with 1.4x
+  handbrake drift turn boost); terrain/floor height clamping; solid obstacle AABB
+  impact damage and rebound bounce; high-speed hostile roadkill ramming damage and
+  knockback; enter/exit transitions and player follow sync.
+- `OpenWorld.java` updates: populated 3 drivable vehicles in the open world
+  (Scout SUV at Garage 60, 40; Trail Bike Motorcycle at Safehouse 215, 52;
+  Village SUV at Riverside Village -180, 230); added `nearestVehicle(px, pz, radius)` query.
+- `WorldRenderer.java` updates: added `drawVehicle` with 3D composite chassis, cabin,
+  wheels, and glowing headlights/taillights for SUV and Motorcycle; added vehicle shadow rendering.
+- `GameView.java` updates: integrated `inventory`, `activeVehicle`, virtual joystick driving
+  controls (Y = throttle/reverse, X = steering, SLIDE button = handbrake), contextual
+  interact button for entering/exiting vehicles, and vehicle driving HUD prompt.
+- Tests: `tests/InventoryVehicleTest.java` (11 groups, 51 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**, InventoryVehicleTest
+  **51 passed / 0 failed**. Total: **2,968 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 34 classes).
+- APK: built, 22,060,942 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2968/0.
+
+Known phase-10 limitations (tracked, see KNOWN_ISSUES.md):
+- Audio triggers and graphics settings sliders planned for Phase 11.
+
 ### PHASE 11 — Audio + settings — PLANNED
+- Audio management, SFX/music volume sliders, vehicle engine sounds, graphics settings.
 ### PHASE 12 — Save/load — PLANNED
 ### PHASE 13 — Optimization — PLANNED
 ### PHASE 14 — Final QA — PLANNED

@@ -29,6 +29,8 @@ javac -Xlint:-options -d "$OUT" \
     "$S/HostileAI.java" \
     "$S/Mission.java" \
     "$S/MissionManager.java" \
+    "$S/Inventory.java" \
+    "$S/Vehicle.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
@@ -39,7 +41,8 @@ javac -Xlint:-options -d "$OUT" \
     "$ROOT/tests/MapTest.java" \
     "$ROOT/tests/EnvironmentTest.java" \
     "$ROOT/tests/AITest.java" \
-    "$ROOT/tests/MissionTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/MissionTest.java" \
+    "$ROOT/tests/InventoryVehicleTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -52,3 +55,4 @@ java -cp "$OUT" MapTest
 java -cp "$OUT" EnvironmentTest
 java -cp "$OUT" AITest
 java -cp "$OUT" MissionTest
+java -cp "$OUT" InventoryVehicleTest

@@ -478,3 +478,51 @@ MissionTest groups (54 checks):
 Defects found & fixed during this phase (real, encountered while testing):
 1. `NavigationTracker.java` lacked a convenient `setDestination(String name, float tx, float tz)` overload → added overload calculating destination route.
 2. `SURVIVE_WAVE` condition in `MissionManager` was checking `onBridge && m.timer > 0f`, but when hostile kills met target count `m.timer` was 0 → restructured wave completion logic to cleanly trigger on hostile kill count OR timer expiration.
+
+## Phase 10 — Inventory & Vehicles (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager,
+  Inventory, Vehicle + 12 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Inventory & Vehicles JVM suite (`InventoryVehicleTest`) | **PASS** — 51 checks, 0 failures | Stacking, consumables, vehicle physics, roadkill ramming |
+| Total JVM test suite | **PASS** — 2,968 checks, 0 failures | Zero regressions across all 12 test suites |
+| Full Android compile (all 34 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,060,942 bytes | step [6/6] + apksigner output |
+| On-device runtime (driving feel, inventory UI) | **NOT TESTED** | No adb in environment; physical install pending |
+
+InventoryVehicleTest groups (51 checks):
+1. **Inventory loadout & stacking**: Initial loadout with 2 medkits and 1 energy drink; item stacking up to max stack count; spilling into subsequent slots when max stack exceeded; count subtraction on removal.
+2. **Inventory usable survival items**: Consuming medkit heals +45 HP (capped at max 100); prevents accidental consumption when already at 100% full health; consuming energy drink refills 100 stamina and grants +30 adrenaline boost; quest items (radio parts) protected from accidental ingestion.
+3. **Inventory capacity limits**: Maximum 12 slots; rejects addition of new item types when backpack is full.
+4. **Vehicle configurations & parameters**: Scout SUV (max 22 m/s, 220 HP, 4.2x2.0m) vs Trail Bike Motorcycle (max 28 m/s, 110 HP, 2.2x0.9m).
+5. **Vehicle throttle & acceleration**: Accelerating forward from 0 to top speed; speed strictly clamped to vehicle maxSpeed.
+6. **Vehicle braking & reverse**: Reverse throttle brakes forward motion; accelerates in reverse up to reverseSpeed (-7.5 m/s).
+7. **Vehicle steering & handbrake drift**: Zero steering rotation when standing still (`|speed| == 0`); velocity-proportional steering turning; handbrake rapidly scrubs speed and boosts drift turning factor (1.4x).
+8. **Vehicle obstacle collision & impact damage**: Rebound velocity bounce and physical damage upon AABB obstacle collision.
+9. **Vehicle hostile roadkill ramming**: High-speed impact inflicts heavy damage and knocks hostile stalkers backward.
+10. **Vehicle enter/exit transitions & proximity**: Proximity check within 3m; boarding vehicle starts engine and synchronizes player position; exiting places player safely beside vehicle.
+11. **OpenWorld vehicle roster & spatial queries**: 3 populated vehicles (Garage SUV, Safehouse Motorcycle, Village SUV); `nearestVehicle` proximity search.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Vehicle steering initially rotated yaw even when completely stationary (`speed = 0`) → gated steering by `turnFactor = Math.min(1.0f, Math.abs(speed) / 4.0f)`.
+2. Vehicle obstacle collision test failed because `world.recomputeActive` had not been invoked at vehicle spawn position to load the chunk's obstacles → called `world.recomputeActive(210f, 45f)` and oriented vehicle toward obstacle.
+3. `WorldRenderer.java` attempted to use non-existent texture names `TEX_BUILDING` / `TEX_WINDOW` for vehicle body → redirected to existing slots `TEX_CONCRETE`, `TEX_ROOF`, and `TEX_RUST` with tinting.
