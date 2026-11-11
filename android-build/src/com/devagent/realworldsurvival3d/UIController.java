@@ -75,7 +75,15 @@ public class UIController {
         this.callbacks = callbacks;
         this.settings = settings;
 
-        overlayRoot = new FrameLayout(activity);
+        overlayRoot = new FrameLayout(activity) {
+            @Override
+            public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+                if (menuLayer != null && menuLayer.getVisibility() == View.VISIBLE) {
+                    return super.dispatchTouchEvent(ev);
+                }
+                return false;
+            }
+        };
         overlayRoot.setLayoutParams(matchParent());
         overlayRoot.setClickable(false);
         overlayRoot.setFocusable(false);

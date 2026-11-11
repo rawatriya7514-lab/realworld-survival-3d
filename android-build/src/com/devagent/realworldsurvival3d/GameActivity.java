@@ -92,6 +92,14 @@ public class GameActivity extends Activity {
     }
 
     @Override
+    public boolean onTouchEvent(android.view.MotionEvent event) {
+        if (gameView != null && gameView.onTouchEvent(event)) {
+            return true;
+        }
+        return super.onTouchEvent(event);
+    }
+
+    @Override
     public void onBackPressed() {
         if (gameView != null && gameView.onBackPressed()) {
             return; // Handled by game (pause/menus)

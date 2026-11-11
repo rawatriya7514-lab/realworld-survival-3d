@@ -117,7 +117,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         this.context = context;
         this.settings = settings;
         setEGLContextClientVersion(2);
-        setEGLConfigChooser(8, 8, 8, 8, 16, 0);
+        setEGLConfigChooser(true);
         setPreserveEGLContextOnPause(true);
         setRenderer(this);
         setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
@@ -137,6 +137,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         worldMap = new WorldMap();
         chasers = new ArrayList<>();
         items = new ArrayList<>();
+        touchInput = new TouchInput();
 
         completedMissions = saveManager.loadInt("completed_missions", 0);
         currentMission = saveManager.loadInt("current_mission", 1);
@@ -606,6 +607,15 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         touchInput.joystickSensitivity = settings.joystickSensitivity;
         touchInput.updateScreenSize(touchInput.screenWidth, touchInput.screenHeight);
         mapController.setLeftHanded(settings.leftHanded);
+    }
+
+    @Override
+    public boolean onTouchEvent(android.view.MotionEvent event) {
+        if (touchInput != null) {
+            touchInput.handleTouchEvent(event);
+            return true;
+        }
+        return super.onTouchEvent(event);
     }
 
     @Override
