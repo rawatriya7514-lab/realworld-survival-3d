@@ -64,6 +64,10 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     private String activeDialogue = null;
     private float dialogueTimer = 0f;
 
+    // Phase 9: Story Missions ("The Long Signal")
+    public final MissionManager missionManager = new MissionManager();
+    private final List<Item> openWorldItems = new ArrayList<>();
+
     // Phase 7: Environment (8-min Day/Night cycle, weather-lite & presets)
     public final DayNightCycle dayNight = new DayNightCycle();
 
@@ -294,9 +298,12 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
         chasers.clear();
         items.clear();
+        openWorldItems.clear();
+        openWorldItems.addAll(missionManager.getMissionPickups());
+        openWorldItems.addAll(missionManager.getDataSlates());
 
-        missionTitle = "Free Roam: The Long Signal";
-        missionGoal = "Explore the city and countryside. Landmarks get discovered.";
+        missionTitle = missionManager.getHudTitle();
+        missionGoal = missionManager.getHudObjective();
 
         mapOverlayVisible = false;
         navigationTracker.clearDestination();
@@ -372,6 +379,16 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
         openWorldFrameCount++;
 
+        // Advance story missions & objective verification
+        missionManager.update(dt, player, openWorld);
+        missionManager.syncNavWaypoint(navigationTracker);
+        if (missionManager.lastToast != null && toastTimer <= 0f) {
+            toastMessage = missionManager.lastToast;
+            toastTimer = missionManager.toastTimer;
+            missionManager.lastToast = null;
+            vibrate(35);
+        }
+
         // Dialogue timer decay
         if (dialogueTimer > 0f) {
             dialogueTimer -= dt;
@@ -391,6 +408,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
                 String speech = nearbyCivilian.interact();
                 activeDialogue = nearbyCivilian.name + " (" + nearbyCivilian.role + "): \"" + speech + "\"";
                 dialogueTimer = 4.5f;
+                missionManager.onPlayerTalk(nearbyCivilian);
                 vibrate(20);
                 touchInput.interactPressed = false;
             }
@@ -400,16 +418,21 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
         // Update Hostiles with performance-budget staggered throttling
         for (HostileAI hostile : openWorld.hostiles) {
+            HostileAI.State oldState = hostile.state;
             hostile.update(dt, player, openWorld, openWorldFrameCount);
+            if (oldState != HostileAI.State.DEFEATED && hostile.state == HostileAI.State.DEFEATED) {
+                missionManager.onHostileDefeated(hostile);
+            }
         }
 
         if (ui != null) {
-            String goal = missionGoal;
+            String title = missionManager.getHudTitle();
+            String goal = missionManager.getHudObjective();
             if (navigationTracker.hasActiveWaypoint) {
                 float rem = navigationTracker.getRemainingDistance(player.x, player.z);
                 goal = "Nav: " + navigationTracker.destinationName + " (" + (int) rem + "m)";
             }
-            ui.setHudMission(missionTitle, goal);
+            ui.setHudMission(title, goal);
             ui.setHudStats(dayNight.getTimeString() + "   Region: " + OpenWorld.regionAt(player.x, player.z).display
                     + "   Score " + player.score);
             String prompt = toastTimer > 0f ? toastMessage : null;
@@ -533,7 +556,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (worldRenderer != null && touchInput != null) {
             if (activeMode == GameMode.OPEN_WORLD) {
                 worldRenderer.renderOpenWorld(gl, player, openWorld, touchInput, currentState,
-                        roadNetwork, navigationTracker, mapController, mapOverlayVisible, dayNight);
+                        roadNetwork, navigationTracker, mapController, mapOverlayVisible, dayNight,
+                        openWorldItems);
             } else {
                 worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
                         currentState, beaconPulse);
@@ -753,6 +777,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
     private void gameOver() {
         currentState = GameState.GAMEOVER;
+        if (activeMode == GameMode.OPEN_WORLD) {
+            missionManager.onPlayerDeath();
+        }
         audioManager.playSfx(GameAudioManager.SFX_GAME_OVER);
         audioManager.stopHeavyBreathing();
         audioManager.stopHeartbeat();

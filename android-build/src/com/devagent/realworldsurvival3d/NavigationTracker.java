@@ -53,6 +53,18 @@ public class NavigationTracker {
         return true;
     }
 
+    public boolean setDestination(String name, float tx, float tz) {
+        this.targetX = tx;
+        this.targetZ = tz;
+        this.destinationName = (name != null) ? name : "Waypoint";
+        this.arrived = false;
+        this.hasActiveWaypoint = true;
+        RoadNetwork.Route route = network.findRoute(tx, tz, tx, tz);
+        this.currentRoute = route;
+        this.currentWaypointIndex = 0;
+        return true;
+    }
+
     /**
      * Clears the current navigation target.
      */

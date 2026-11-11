@@ -40,11 +40,15 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 8)
-1. **Story mission storyline** — Story missions "The Long Signal" (6 sequential quests)
-   are planned for Phase 9.
+## Open issues (Phase 9)
+1. **Backpack Inventory & Drivable Vehicles** — Dedicated backpack grid UI, usable
+   medkits/consumables, and car/motorcycle vehicle driving physics planned for Phase 10.
 
 ## Resolved during development
+- PHASE 9: "The Long Signal" 6-mission story arc with interactive objectives (locations,
+  radio part salvage, NPC dialogue, elevation check, wave defense, transmission finale),
+  5 hidden data slates across world landmarks, auto-waypoint synchronization, and
+  retry resilience on death.
 - PHASE 8: HunterEnemy and HostileAI articulated limb animation rigs, eliminating
   the legacy single-box enemy placeholder; Civilian NPCs with conversational
   dialogue cycles and proximity prompts; Central Plaza safe haven repulsion boundary

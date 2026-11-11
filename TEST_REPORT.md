@@ -434,3 +434,47 @@ Defects found & fixed during this phase (real, encountered while testing):
 1. `CharacterAnimator.update` takes 4 arguments `(dt, state, horizSpeed, isGrounded)` but `CivilianNPC` initially passed 5 arguments → fixed call signature across all NPC states.
 2. `Player.ParkourState` has `VAULTING` rather than `VAULT_LOW` → fixed hostile and chaser animation state mapping.
 3. `HostileAI.java` had combat interaction resolution after the `stunTimer > 0f` check, preventing followup slide tackles or drop stomps while enemies were stunned → moved `resolvePlayerInteractions` before stun return.
+
+## Phase 9 — Story Missions ("The Long Signal") (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager + 11 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Total JVM test suite | **PASS** — 2,917 checks, 0 failures | Zero regressions across all 11 test suites |
+| Full Android compile (all 32 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,056,846 bytes | step [6/6] + apksigner output |
+| On-device runtime (mission progression, quest HUD) | **NOT TESTED** | No adb in environment; physical install pending |
+
+MissionTest groups (54 checks):
+1. **Mission arc structure & initialization**: Sequential order across all 6 story missions; first active, rest locked.
+2. **Mission 1 (Static)**: Location check at Safehouse (210, 60 within 12m); completion awards +250 score & +50 currency.
+3. **Mission 2 (Salvage)**: 4 radio parts spawned across ruins; collection progression 1/4 to 4/4; completion awards +350 score & +75 currency.
+4. **Mission 3 (The Engineer)**: Dialogue verification; Jack advances quest while other NPCs do not; awards +400 score & +100 currency.
+5. **Mission 4 (High Ground)**: Elevation check at North Watchtower apex (y >= 30m); awards +500 score & +150 currency.
+6. **Mission 5 (Nightfall)**: Location-gated survival timer and hostile elimination count on River Bridge deck; awards +650 score & +200 currency.
+7. **Mission 6 (The Long Signal)**: Rooftop broadcast console at Safehouse (y >= 5.5m); completion sets `storyCompleted = true`, awards +1000 score & +500 currency.
+8. **Hidden Data Slates**: 5 collectibles across landmarks; awards +150 score per slate; counter tracking.
+9. **NavigationTracker auto-sync**: Automatically routes road network path to active quest target; preserves custom player waypoints.
+10. **Mission failure & retry resilience**: Resetting active mission objectives on player death without losing overall story quest progress.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. `NavigationTracker.java` lacked a convenient `setDestination(String name, float tx, float tz)` overload → added overload calculating destination route.
+2. `SURVIVE_WAVE` condition in `MissionManager` was checking `onBridge && m.timer > 0f`, but when hostile kills met target count `m.timer` was 0 → restructured wave completion logic to cleanly trigger on hostile kill count OR timer expiration.

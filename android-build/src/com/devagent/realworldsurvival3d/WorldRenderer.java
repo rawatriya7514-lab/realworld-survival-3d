@@ -634,7 +634,16 @@ public class WorldRenderer {
                                 RoadNetwork roadNetwork, NavigationTracker navTracker,
                                 MapViewController mapController, boolean mapOverlayVisible,
                                 DayNightCycle dayNight) {
-        renderCore(player, null, null, null, touch, state, 0f, openWorld,
+        renderOpenWorld(gl, player, openWorld, touch, state, roadNetwork, navTracker,
+                mapController, mapOverlayVisible, dayNight, null);
+    }
+
+    public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
+                                TouchInput touch, GameView.GameState state,
+                                RoadNetwork roadNetwork, NavigationTracker navTracker,
+                                MapViewController mapController, boolean mapOverlayVisible,
+                                DayNightCycle dayNight, List<Item> items) {
+        renderCore(player, null, null, items, touch, state, 0f, openWorld,
                 roadNetwork, navTracker, mapController, mapOverlayVisible, dayNight);
     }
 
@@ -1068,6 +1077,8 @@ public class WorldRenderer {
             case ENERGY_DRINK: r = 0.1f; g = 0.9f; b = 0.95f; break;
             case MEDKIT:       r = 0.95f; g = 0.15f; b = 0.2f; break;
             case DATA_DRIVE:   r = 0.85f; g = 0.3f; b = 0.95f; break;
+            case RADIO_PART:   r = 0.15f; g = 0.85f; b = 1.0f; break;
+            case DATA_SLATE:   r = 1.0f; g = 0.82f; b = 0.15f; break;
             default:           r = 1.0f; g = 0.85f; b = 0.1f; break;
         }
         float pulse = 0.75f + 0.25f * (float) Math.sin(item.rotation * 2.0);

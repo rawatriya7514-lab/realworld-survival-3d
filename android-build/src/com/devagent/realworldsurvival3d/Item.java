@@ -8,7 +8,9 @@ public class Item {
         ENERGY_DRINK,
         MEDKIT,
         DATA_DRIVE,
-        PARKOUR_TOKEN
+        PARKOUR_TOKEN,
+        RADIO_PART,
+        DATA_SLATE
     }
 
     public Type type;
@@ -51,6 +53,14 @@ public class Item {
                 player.currency += 10;
                 player.score += 50;
                 player.adrenaline = Math.min(player.maxAdrenaline, player.adrenaline + 15f);
+                break;
+            case RADIO_PART:
+                player.score += 75;
+                player.currency += 25;
+                break;
+            case DATA_SLATE:
+                player.score += 150;
+                player.currency += 50;
                 break;
         }
     }

@@ -382,9 +382,55 @@ Test results (real, this session):
 Known phase-8 limitations (tracked, see KNOWN_ISSUES.md):
 - Mission progression currently Free Roam only ("The Long Signal" storyline planned for Phase 9).
 
-### PHASE 9 — Missions — PLANNED
-- "The Long Signal" 6-mission story + side objectives, rewards, failure.
+### PHASE 9 — Missions (2026-11-11) — DONE
+Scope: Full 6-mission storyline ("The Long Signal") across open-world districts,
+interactive quest objectives (locations, salvage collection, NPC dialogue, elevation,
+bridge defense, transmission broadcast), 5 hidden Data Slate side collectibles,
+auto-sync waypoint navigation, rewards, and safe failure retry persistence.
+
+What was built (all original code):
+- `Mission.java` (new, pure Java): quest data model with objective types (`REACH_LOCATION`,
+  `COLLECT_ITEMS`, `TALK_NPC`, `REACH_HIGH_GROUND`, `SURVIVE_WAVE`, `TRANSMIT_SIGNAL`);
+  completion criteria; timer formatting; score/currency reward tracking; side objective status.
+- `MissionManager.java` (new, pure Java): comprehensive quest controller managing
+  the 6-mission story arc:
+  1. *Static* (Reach Safehouse 210, 60, +250 pts, +50 currency)
+  2. *Salvage* (Collect 4 Radio Parts across ruins, +350 pts, +75 currency)
+  3. *The Engineer* (Talk to Jack at Safehouse, +400 pts, +100 currency)
+  4. *High Ground* (Climb to North Watchtower summit y>=30, +500 pts, +150 currency)
+  5. *Nightfall* (Survive infected wave at River Bridge -155, 240, +650 pts, +200 currency)
+  6. *The Long Signal* (Broadcast from Safehouse roof console y>=5.5, +1000 pts, +500 currency);
+  5 hidden Data Slate collectibles placed across major landmarks (+150 pts each);
+  auto-waypoint synchronization with `NavigationTracker` (routing road path to current quest goal);
+  safe failure reset on player death without resetting overall story progress.
+- `Item.java` updates: added `RADIO_PART` and `DATA_SLATE` pickup types with score/currency rewards.
+- `NavigationTracker.java` updates: added `setDestination(String name, float tx, float tz)`
+  overload supporting single-call mission objective routing.
+- `WorldRenderer.java` updates: renders open-world mission pickups and data slates with
+  custom glowing neon shaders (cyan pulse for radio parts, golden amber for data slates);
+  passes open-world item collection to draw pass.
+- `GameView.java` updates: wires `MissionManager` update loop, dialogue event routing,
+  hostile defeat counts during bridge wave, quest HUD mission titles and objective strings,
+  and retry triggers on game over.
+- Tests: `tests/MissionTest.java` (10 groups, 54 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**.
+  Total: **2,917 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 32 classes).
+- APK: built, 22,056,846 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2917/0.
+
+Known phase-9 limitations (tracked, see KNOWN_ISSUES.md):
+- Dedicated backpack inventory and drivable vehicles planned for Phase 10.
+
 ### PHASE 10 — Inventory + vehicles — PLANNED
+- Inventory system (medkits, stamina boosters, parts, keys) + car/motorcycle vehicle physics.
 ### PHASE 11 — Audio + settings — PLANNED
 ### PHASE 12 — Save/load — PLANNED
 ### PHASE 13 — Optimization — PLANNED
