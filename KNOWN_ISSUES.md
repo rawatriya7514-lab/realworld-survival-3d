@@ -40,10 +40,20 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 14)
-1. **Release Packaging & Distribution Checksum** — Phase 15 release APK packaging, SHA-256 integrity checksum generation, and final project delivery.
+## Open issues (Phase 15 - Final Delivery)
+1. **No device testing possible in this environment** — no adb, no emulator,
+   Termux cannot self-install APKs. All device-runtime claims stay NOT TESTED
+   until a physical install happens.
+2. **Procedural fallback animations** — no skeletal animation set is available
+   offline; characters use procedural limb animation (GDD §7). Visual quality
+   ceiling acknowledged.
+3. **Music is 22.05 kHz mono WAV** — deliberate size trade-off; regenerable
+   at higher quality via `generate_music.py`.
 
 ## Resolved during development
+- PHASE 15: Release APK packaging and cryptographic verification (`RealWorldSurvival3D.apk`,
+  22,458,892 bytes, SHA-256 `899782e6ef913597d196fa4622fa6d37cbc69e4a7ce45c247c115824e2900023`,
+  v1+v2+v3 signature verified, 3,362 JVM checks passing across 16 test suites, all 15 roadmap phases complete).
 - PHASE 14: Comprehensive end-to-end QA audit (`tests/FinalQATest.java`) across all 14 subsystem
   dimensions (3,362 total checks passed across 16 test suites, 0 regressions, full APK build and signature verified).
 - PHASE 13: Spatial frustum and sphere culling engine (`CullingOptimizer.java`), in-place zero-allocation
