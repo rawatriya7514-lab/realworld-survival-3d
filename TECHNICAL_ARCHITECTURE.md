@@ -51,11 +51,25 @@ GameActivity (Android lifecycle, immersive fullscreen)
 | `UIController` (extended) | Mode select, expanded settings (LOW/MED/HIGH, resolution scale, FPS 30/45/60, button size/opacity, left-handed, master/music/SFX volume, auto-save), map screen, inventory screen | Built + manual; View code |
 | `WorldRenderer` (extended) | Terrain chunk VBOs, trees/props, water, character limbs, day/night uniforms, minimap GL overlay | Built; device NOT TESTED |
 
+### 2.2b Implementation status after PHASE 1 (2026-11-11)
+- **Built:** `Terrain` (analytic heightfield + 96-vert chunk meshes), `OpenWorld`
+  (7 regions w/ unique IDs, 10 POIs, deterministic seed-1337 chunk content,
+  3×3 streaming, bridge + pier, safe zone), Player terrain/water integration
+  (in-place extension of `Player`, signature unchanged), renderer open-world
+  path (atlas terrain VBOs, props, blended water, culling), `GameMode`
+  PARKOUR/OPEN_WORLD routing in `GameView`, main-menu mode select.
+- **Not yet built (planned phases):** `PlayerController` state machine (Phase 2),
+  `CharacterAnimator` (3), `CameraRig` (4), `RoadNetwork` (6), interiors (7),
+  NPCs (8), missions (9), vehicles/inventory (10), save (12).
+- The planned `PlayerController` subclass was replaced by extending `Player`
+  directly with nullable `terrain`/`waterLevel` fields so the parkour campaign
+  keeps its exact physics path.
+
 ### 2.3 World & coordinate system
-- World: **864 m × 864 m** (−432…+432 on X/Z), Y up, origin at city center crossroads.
-- Chunk grid: 64 m cells → 14×14 = **196 chunks**, each with stable ID `R<col>_<row>`; regions group chunks (CITY_CORE, RESIDENTIAL, RIVERSIDE_VILLAGE, WEST_FOREST, NORTH_HILLS, RIVER); each region has a unique integer ID + name.
+- World: **896 m × 896 m** (−448…+448 on X/Z), Y up, origin near the city center.
+- Chunk grid: 64 m cells → 14×14 = **196 chunks**, each with stable ID `R<col>_<row>`; regions group chunks (CITY_CORE, RESIDENTIAL, RIVERSIDE_VILLAGE, WEST_FOREST, NORTH_HILLS, RIVER, OUTSKIRTS); each region has a unique integer ID + name.
 - Streaming: active set = 3×3 chunks around player (Performance: 2×2); chunks build cached VBOs on load; distant chunks release buffers.
-- Road network drives NPC routes, map rendering, and waypoint navigation (recalculated when the player leaves the current route by >12 m).
+- Road network drives NPC routes, map rendering, and waypoint navigation (recalculated when the player leaves the current route by >12 m). *(Planned — Phase 6; Phase 1 ships 11 hand-placed road strips as non-solid slabs in flat zones.)*
 
 ### 2.4 Performance budget (mid-range arm64, 3 GB RAM)
 - Target: 60 FPS uncapped / 45 / 30 selectable; LOW preset drops draw distance & vegetation.

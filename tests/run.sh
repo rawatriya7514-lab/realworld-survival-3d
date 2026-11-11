@@ -11,10 +11,14 @@ mkdir -p "$OUT"
 S=android-build/src/com/devagent/realworldsurvival3d
 javac -Xlint:-options -d "$OUT" \
     "$S/Obstacle.java" \
+    "$S/Terrain.java" \
+    "$S/OpenWorld.java" \
     "$S/WorldMap.java" \
     "$S/Player.java" \
     "$S/HunterEnemy.java" \
     "$S/Item.java" \
-    "$ROOT/tests/GameLogicTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/GameLogicTest.java" \
+    "$ROOT/tests/OpenWorldTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
+java -cp "$OUT" OpenWorldTest

@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
+import java.util.HashMap;
 import java.util.List;
 import javax.microedition.khronos.opengles.GL10;
 
@@ -102,6 +103,18 @@ public class WorldRenderer {
     public static final int TEX_CONCRETE = 0, TEX_ROOF = 1, TEX_RUST = 2,
             TEX_HAZARD = 3, TEX_NEON = 4, TEX_CHASER = 5, TEX_RUNNER = 6;
 
+    // Procedural 4-tile terrain atlas (grass / rock / sand / asphalt)
+    private int atlasTex = 0;
+
+    // Terrain chunk VBO cache (key = col * 10000 + row)
+    private static final int MAX_CHUNK_VBOS = 27;
+    private static final int VERT_STRIDE = FLOATS_PER_VERT * 4; // 32 bytes
+    private static final class ChunkVbo {
+        int vbo;
+        int vertexCount;
+    }
+    private final HashMap<Long, ChunkVbo> chunkVbos = new HashMap<>();
+
     // ------------------------------------------------------------------
     // Camera state (smoothed)
     // ------------------------------------------------------------------
@@ -132,6 +145,7 @@ public class WorldRenderer {
         buildShaders();
         buildGeometry();
         loadAllTextures();
+        buildTerrainAtlas();
         glReady = true;
     }
 
@@ -432,11 +446,171 @@ public class WorldRenderer {
     }
 
     // ==================================================================
+    // Terrain: procedural atlas + chunk VBOs
+    // ==================================================================
+
+    /** Deterministic 2D hash noise in [0,1). */
+    private static float hash2(int x, int y) {
+        int h = x * 374761393 + y * 668265263;
+        h = (h ^ (h >> 13)) * 1274126177;
+        return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
+    }
+
+    /**
+     * Builds a 512x512 atlas of four 256px tiles:
+     *   GL space (v=0 bottom): tile 0 grass (tx0,ty0), 1 rock (tx1,ty0),
+     *   2 sand (tx0,ty1), 3 asphalt (tx1,ty1).
+     * Bitmap row 0 is the TOP of the texture, so bitmap bands flip: ty0
+     * occupies bitmap y 256..511, ty1 occupies 0..255.
+     */
+    private void buildTerrainAtlas() {
+        final int S = 512, T = 256;
+        int[] px = new int[S * S];
+        for (int y = 0; y < S; y++) {
+            int ty = (y < T) ? 1 : 0;   // bitmap band -> GL tile row
+            for (int x = 0; x < S; x++) {
+                int tx = x / T;
+                int tile = tx + ty * 2; // matches Terrain.TILE_* ordering
+                float n = hash2(x, y);
+                float n2 = hash2(x * 3 + 7, y * 5 + 11);
+                float r, g, b;
+                switch (tile) {
+                    case Terrain.TILE_ROCK:
+                        r = 0.40f + 0.16f * n; g = 0.38f + 0.14f * n; b = 0.36f + 0.12f * n;
+                        if (n2 > 0.8f) { r += 0.06f; g += 0.06f; b += 0.05f; }
+                        break;
+                    case Terrain.TILE_SAND:
+                        r = 0.72f + 0.10f * n; g = 0.64f + 0.10f * n; b = 0.44f + 0.08f * n;
+                        if (n2 > 0.9f) { r += 0.05f; g += 0.05f; }
+                        break;
+                    case Terrain.TILE_ASPHALT:
+                        r = 0.13f + 0.05f * n; g = 0.13f + 0.05f * n; b = 0.15f + 0.05f * n;
+                        if (n2 > 0.92f) { r += 0.10f; g += 0.10f; b += 0.10f; }
+                        break;
+                    default: // grass
+                        r = 0.26f + 0.09f * n; g = 0.40f + 0.13f * n; b = 0.17f + 0.07f * n;
+                        if (n2 > 0.82f) { r *= 0.8f; g *= 0.85f; }
+                        break;
+                }
+                int ir = (int) (Math.min(1f, r) * 255f);
+                int ig = (int) (Math.min(1f, g) * 255f);
+                int ib = (int) (Math.min(1f, b) * 255f);
+                px[y * S + x] = 0xFF000000 | (ir << 16) | (ig << 8) | ib;
+            }
+        }
+        Bitmap bmp = Bitmap.createBitmap(px, S, S, Bitmap.Config.ARGB_8888);
+        int[] ids = new int[1];
+        GLES20.glGenTextures(1, ids, 0);
+        atlasTex = ids[0];
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, atlasTex);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER,
+                GLES20.GL_LINEAR_MIPMAP_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER,
+                GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S,
+                GLES20.GL_REPEAT);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T,
+                GLES20.GL_REPEAT);
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0);
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+        bmp.recycle();
+    }
+
+    private void deleteChunkVbos() {
+        for (ChunkVbo c : chunkVbos.values()) {
+            GLES20.glDeleteBuffers(1, new int[]{c.vbo}, 0);
+        }
+        chunkVbos.clear();
+    }
+
+    /** Uploads (or reuses) the static VBO for one terrain chunk. */
+    private ChunkVbo ensureChunkVbo(int col, int row) {
+        Long key = col * 10000L + row;
+        ChunkVbo c = chunkVbos.get(key);
+        if (c != null) return c;
+        if (chunkVbos.size() >= MAX_CHUNK_VBOS) deleteChunkVbos();
+        Terrain.MeshData mesh = Terrain.buildChunkMesh(col, row);
+        FloatBuffer fb = floatBuffer(mesh.verts);
+        int[] ids = new int[1];
+        GLES20.glGenBuffers(1, ids, 0);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, ids[0]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, mesh.verts.length * 4, fb,
+                GLES20.GL_STATIC_DRAW);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
+        c = new ChunkVbo();
+        c.vbo = ids[0];
+        c.vertexCount = mesh.vertexCount;
+        chunkVbos.put(key, c);
+        return c;
+    }
+
+    private void bindWorldAttribsVbo(int vboId) {
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vboId);
+        GLES20.glEnableVertexAttribArray(wLocPos);
+        GLES20.glVertexAttribPointer(wLocPos, 3, GLES20.GL_FLOAT, false, VERT_STRIDE, 0);
+        GLES20.glEnableVertexAttribArray(wLocNormal);
+        GLES20.glVertexAttribPointer(wLocNormal, 3, GLES20.GL_FLOAT, false, VERT_STRIDE, 12);
+        GLES20.glEnableVertexAttribArray(wLocUV);
+        GLES20.glVertexAttribPointer(wLocUV, 2, GLES20.GL_FLOAT, false, VERT_STRIDE, 24);
+    }
+
+    /** Draws the 3x3 active terrain chunks around the player. */
+    private void drawTerrain(Player player, OpenWorld openWorld) {
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, atlasTex);
+        GLES20.glUniform1i(wLocUseTex, 1);
+        GLES20.glUniform2f(wLocUVScale, 1f, 1f);
+        GLES20.glUniform4f(wLocTint, 0.98f, 0.98f, 0.98f, 1f);
+        GLES20.glUniform1f(wLocSpec, 0.03f);
+        GLES20.glUniform1f(wLocAlpha, 1f);
+        int pc = OpenWorld.chunkIndex(player.x), pr = OpenWorld.chunkIndex(player.z);
+        // Mesh vertices are already in world space: identity model matrix.
+        float[] model = Mat4.trs(0f, 0f, 0f, 0f, 1f, 1f, 1f);
+        float[] mvp = new float[16];
+        Matrix.multiplyMM(mvp, 0, vpMatrix, 0, model, 0);
+        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, mvp, 0);
+        GLES20.glUniformMatrix4fv(wLocModel, 1, false, model, 0);
+        float camFX = camTX - camX, camFY = camTY - camY, camFZ = camTZ - camZ;
+        for (int dc = -1; dc <= 1; dc++) {
+            for (int dr = -1; dr <= 1; dr++) {
+                int c = pc + dc, r = pr + dr;
+                if (c < 0 || c >= OpenWorld.CHUNKS_PER_SIDE
+                        || r < 0 || r >= OpenWorld.CHUNKS_PER_SIDE) continue;
+                ChunkVbo chunk = ensureChunkVbo(c, r);
+                float chunkX = c * 64f - 448f + 32f;
+                float chunkZ = r * 64f - 448f + 32f;
+                // Behind-camera cull on chunk centers
+                float dx = chunkX - camX, dy = 0f, dz = chunkZ - camZ;
+                float radius = 60f;
+                if (dx * camFX + dy * camFY + dz * camFZ < -radius) continue;
+                float distSq = dx * dx + dz * dz;
+                if (distSq > (farPlane + 90f) * (farPlane + 90f)) continue;
+
+                bindWorldAttribsVbo(chunk.vbo);
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, chunk.vertexCount);
+                GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0);
+                unbindWorldAttribs();
+            }
+        }
+    }
+
+    // ==================================================================
     // Frame render
     // ==================================================================
     public void render(GL10 gl, Player player, WorldMap worldMap, List<HunterEnemy> chasers,
                        List<Item> items, TouchInput touch, GameView.GameState state,
                        float beaconPulse) {
+        renderCore(player, worldMap, chasers, items, touch, state, beaconPulse, null);
+    }
+
+    /** Open-world frame: terrain chunks + streamed obstacles, no parkour beacon. */
+    public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
+                                TouchInput touch, GameView.GameState state) {
+        renderCore(player, null, null, null, touch, state, 0f, openWorld);
+    }
+
+    private void renderCore(Player player, WorldMap worldMap, List<HunterEnemy> chasers,
+                            List<Item> items, TouchInput touch, GameView.GameState state,
+                            float beaconPulse, OpenWorld openWorld) {
         if (!glReady) {
             init();
         }
@@ -456,7 +630,7 @@ public class WorldRenderer {
                 || player.adrenalineRush;
         float fov = speedBoost ? 82f : 65f;
         Matrix.perspectiveM(projMatrix, 0, fov, aspect, 0.4f, farPlane);
-        setupCamera(player);
+        setupCamera(player, openWorld);
         Matrix.multiplyMM(vpMatrix, 0, projMatrix, 0, viewMatrix, 0);
 
         // ---- Sky ----
@@ -466,9 +640,19 @@ public class WorldRenderer {
         useWorldProgram();
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
 
-        if (worldMap != null && worldMap.obstacles != null) {
+        if (openWorld != null) {
+            drawTerrain(player, openWorld);
+        }
+
+        List<Obstacle> worldObstacles = null;
+        if (openWorld != null) {
+            worldObstacles = openWorld.activeObstacles();
+        } else if (worldMap != null && worldMap.obstacles != null) {
+            worldObstacles = worldMap.obstacles;
+        }
+        if (worldObstacles != null) {
             float camFX = camTX - camX, camFY = camTY - camY, camFZ = camTZ - camZ;
-            for (Obstacle o : worldMap.obstacles) {
+            for (Obstacle o : worldObstacles) {
                 // Cheap behind-camera cull
                 float dx = o.x - camX, dy = o.y - camY, dz = o.z - camZ;
                 float radius = (o.width + o.height + o.depth) * 0.5f;
@@ -533,7 +717,11 @@ public class WorldRenderer {
             GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
             GLES20.glDepthMask(false);
             if (player.state != Player.ParkourState.DEAD) {
-                drawShadow(worldMap, player.x, player.z, player.y, 0.55f, 0.38f);
+                if (openWorld != null) {
+                    drawShadowOpen(openWorld, player.x, player.z, player.y, 0.55f, 0.38f);
+                } else {
+                    drawShadow(worldMap, player.x, player.z, player.y, 0.55f, 0.38f);
+                }
             }
             if (chasers != null) {
                 for (HunterEnemy ch : chasers) {
@@ -549,12 +737,12 @@ public class WorldRenderer {
         // ---- HUD ----
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glDisable(GLES20.GL_CULL_FACE);
-        renderHUD(gl, player, touch, state, worldMap);
+        renderHUD(player, touch, state, worldMap);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
         GLES20.glEnable(GLES20.GL_CULL_FACE);
     }
 
-    private void setupCamera(Player player) {
+    private void setupCamera(Player player, OpenWorld openWorld) {
         float radYaw = (float) Math.toRadians(player.yaw);
         float radPitch = (float) Math.toRadians(player.pitch);
         float fwdX = (float) (Math.sin(radYaw) * Math.cos(radPitch));
@@ -589,6 +777,12 @@ public class WorldRenderer {
             camTZ = player.z;
         }
 
+        // Terrain-aware minimum camera height (open world): never under ground
+        if (openWorld != null) {
+            float minY = Terrain.heightAt(camX, camZ) + 1.0f;
+            if (camY < minY) camY = minY;
+        }
+
         float rollRad = (float) Math.toRadians(player.cameraRoll);
         camUpX = (float) Math.sin(rollRad);
         camUpY = (float) Math.cos(rollRad);
@@ -614,10 +808,41 @@ public class WorldRenderer {
     }
 
     private void drawObstacle(Obstacle o) {
+        // --- Open-world types with custom multi-part or translucent draws ---
+        if (o.type == Obstacle.Type.TREE) { drawTree(o); return; }
+        if (o.type == Obstacle.Type.LAMP) { drawLamp(o); return; }
+        if (o.type == Obstacle.Type.WATER_PLANE) { drawWater(o); return; }
+        if (o.type == Obstacle.Type.BUSH) {
+            drawBoxNoTex(o, o.r, o.g, o.b, 0.95f, 0.1f);
+            return;
+        }
+        if (o.type == Obstacle.Type.ROCK) {
+            drawBoxNoTex(o, o.r, o.g, o.b, 1f, 0.15f);
+            return;
+        }
+
         int tex;
         float r = o.r, g = o.g, b = o.b;
         float uvx, uvy, spec;
         switch (o.type) {
+            case ROAD_SLAB:
+                tex = TEX_ROOF;
+                uvx = Math.max(1f, o.width / 8f);
+                uvy = Math.max(1f, o.depth / 8f);
+                spec = 0.08f;
+                break;
+            case BRIDGE:
+                tex = TEX_RUST;
+                uvx = Math.max(1f, Math.max(o.width, o.depth) / 4f);
+                uvy = Math.max(1f, o.height / 4f);
+                spec = 0.2f;
+                break;
+            case CRATE:
+                tex = TEX_RUST;
+                uvx = 1.5f;
+                uvy = 1.5f;
+                spec = 0.15f;
+                break;
             case BUILDING:
             default:
                 tex = TEX_CONCRETE;
@@ -674,6 +899,60 @@ public class WorldRenderer {
         }
         float[] model = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
         drawCubeModel(model, tex, r, g, b, 1f, uvx, uvy, spec, 1f);
+    }
+
+    // ==================================================================
+    // Open-world prop draws (trees, lamps, water, untextured boxes)
+    // ==================================================================
+    private void drawTree(Obstacle o) {
+        float[] trunk = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
+        drawCubeModel(trunk, TEX_RUST, 0.36f, 0.25f, 0.15f, 1f, 1f, 1f, 0.1f, 1f);
+        float topY = o.getMaxY();
+        float[] c1 = Mat4.trs(o.x, topY + 1.1f, o.z, 0f, 3.4f, 2.2f, 3.4f);
+        drawCubeModelNoTex(c1, 0.17f, 0.35f, 0.13f, 1f, 0.05f);
+        float[] c2 = Mat4.trs(o.x, topY + 2.4f, o.z, 0f, 2.2f, 1.6f, 2.2f);
+        drawCubeModelNoTex(c2, 0.20f, 0.40f, 0.15f, 1f, 0.05f);
+    }
+
+    private void drawLamp(Obstacle o) {
+        float[] pole = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
+        drawCubeModel(pole, TEX_RUST, 0.30f, 0.32f, 0.36f, 1f, 1f, 1f, 0.2f, 1f);
+        float topY = o.getMaxY();
+        float[] glow = Mat4.trs(o.x, topY + 0.3f, o.z, 0f, 0.8f, 0.5f, 0.8f);
+        drawCubeModelNoTex(glow, 1.0f, 0.85f, 0.45f, 0.9f, 0.8f);
+    }
+
+    private void drawWater(Obstacle o) {
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+        GLES20.glDepthMask(false);
+        drawBoxNoTex(o, 0.16f, 0.36f, 0.55f, 0.62f, 0.5f);
+        GLES20.glDepthMask(true);
+        GLES20.glDisable(GLES20.GL_BLEND);
+    }
+
+    private void drawBoxNoTex(Obstacle o, float r, float g, float b,
+                              float alpha, float spec) {
+        float[] model = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
+        drawCubeModelNoTex(model, r, g, b, alpha, spec);
+    }
+
+    /** Cube drawn with the world shader but sampling disabled (plain tint). */
+    private void drawCubeModelNoTex(float[] model, float r, float g, float b,
+                                    float alpha, float spec) {
+        float[] mvp = new float[16];
+        Matrix.multiplyMM(mvp, 0, vpMatrix, 0, model, 0);
+        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, mvp, 0);
+        GLES20.glUniformMatrix4fv(wLocModel, 1, false, model, 0);
+        GLES20.glUniform2f(wLocUVScale, 1f, 1f);
+        GLES20.glUniform4f(wLocTint, r, g, b, 1f);
+        GLES20.glUniform1f(wLocSpec, spec);
+        GLES20.glUniform1f(wLocAlpha, alpha);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, atlasTex);
+        GLES20.glUniform1i(wLocUseTex, 0);
+        bindWorldAttribs(cubeVbo);
+        GLES20.glDrawElements(GLES20.GL_TRIANGLES, 36, GLES20.GL_UNSIGNED_SHORT, cubeIbo);
+        unbindWorldAttribs();
     }
 
     private void drawItem(Item item) {
@@ -766,7 +1045,16 @@ public class WorldRenderer {
 
     private void drawShadow(WorldMap worldMap, float x, float z, float entityY,
                             float size, float alpha) {
-        float floorY = worldMap.getFloorY(x, z, entityY);
+        drawShadowAt(worldMap.getFloorY(x, z, entityY), x, z, entityY, size, alpha);
+    }
+
+    private void drawShadowOpen(OpenWorld openWorld, float x, float z, float entityY,
+                                float size, float alpha) {
+        drawShadowAt(openWorld.floorAt(x, z, entityY), x, z, entityY, size, alpha);
+    }
+
+    private void drawShadowAt(float floorY, float x, float z, float entityY,
+                              float size, float alpha) {
         if (floorY < -900f) return;
         float height = entityY - floorY;
         float fade = (float) Math.max(0.15, 1.0 - height / 14.0);
@@ -788,7 +1076,7 @@ public class WorldRenderer {
     // ==================================================================
     // HUD
     // ==================================================================
-    private void renderHUD(GL10 gl, Player player, TouchInput touch, GameView.GameState state,
+    private void renderHUD(Player player, TouchInput touch, GameView.GameState state,
                            WorldMap worldMap) {
         GLES20.glUseProgram(hudProgram);
         float[] mvp = new float[16];

@@ -17,5 +17,31 @@ Maintained per phase; nothing is hidden.
 5. **Music is 22.05 kHz mono WAV** — deliberate size trade-off; regenerable
    at higher quality via `generate_music.py`.
 
+## Open issues (Phase 1)
+1. **No swimming** — deep water (depth > 1.5 m) is a movement wall. Players
+   can wade the shallows and cross at the bridge; a swim state comes later
+   (environment phase) if design keeps it.
+2. **Roads only in flat zones** — the 11 road strips are placed in the city/
+   residential/village flats and the bridge corridor; no road surface on
+   hills yet (hill driving is off-road terrain).
+3. **Buildings have no interiors** — all structures are solid boxes; walkable
+   interiors + doors are Phase 7.
+4. **Open-world progress is not saved** — pausing/quitting an open-world
+   session loses discovered-POI state (parkour autosave unaffected). Save
+   phase: 12.
+5. **No day/night cycle yet** — open world inherits the parkour dusk lighting;
+   cycle lands with Phase 7.
+6. **Water is a translucent plane, not a shader** — no waves/reflections;
+   fine at dusk, revisit with graphics presets (Phase 7/13).
+7. **POI discovery only** — shops/safe zones are discoverable but have no
+   shop UI or healing yet (Phases 8–10).
+8. **Unverified on-device GL path** — terrain VBO path, atlas texture and
+   blended-water draws compile and are logic-tested, but have never rendered
+   on a real screen (no adb). First device test is the top priority of the
+   next phase.
+
 ## Resolved during development
-(appended as issues are fixed, with the phase that fixed them)
+- PHASE 1: flat-channel trap on entering deep water (strictly-deeper rule),
+  1 cm/frame creep epsilon, bridge-corridor approach flatten coverage
+  (±85 m), leftover `considerFloor` stub, private `Terrain` constructor,
+  stale `renderHUD(gl, …)` call. Details: TEST_REPORT.md §Phase 1.

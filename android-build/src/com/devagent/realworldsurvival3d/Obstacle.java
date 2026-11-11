@@ -19,7 +19,16 @@ public class Obstacle {
         AC_UNIT,
         ANTENNA,
         WATER_TANK,
-        CONSOLE
+        CONSOLE,
+        // Open-world additions
+        TREE,          // collider = trunk; renderer adds the canopy
+        ROCK,
+        BUSH,          // decorative (non-solid)
+        WATER_PLANE,   // river surface (non-solid)
+        ROAD_SLAB,     // asphalt/dirt road segment (non-solid, walks on terrain)
+        BRIDGE,        // solid walkable deck
+        CRATE,         // container (solid)
+        LAMP           // street lamp; renderer adds the glow
     }
 
     public Type type;
@@ -29,6 +38,8 @@ public class Obstacle {
     public boolean climbable;      // Top ledge can be grabbed/mantled
     public boolean wallRunnable;   // Vertical surface can be wall-run
     public boolean vaultable;      // Can be vaulted over seamlessly
+    /** false = drawn but ignored by collision (bushes, water, road decals). */
+    public boolean solid = true;
 
     public Obstacle(Type type, float x, float y, float z, float width, float height, float depth) {
         this.type = type;
@@ -111,6 +122,31 @@ public class Obstacle {
                 this.climbable = false;
                 this.wallRunnable = false;
                 this.vaultable = false;
+                break;
+            // Open-world prop defaults (renderer may draw extra parts on top)
+            case TREE:
+                this.r = 0.36f; this.g = 0.25f; this.b = 0.15f; // trunk bark
+                break;
+            case ROCK:
+                this.r = 0.46f; this.g = 0.44f; this.b = 0.42f;
+                break;
+            case BUSH:
+                this.r = 0.20f; this.g = 0.40f; this.b = 0.16f;
+                break;
+            case WATER_PLANE:
+                this.r = 0.16f; this.g = 0.36f; this.b = 0.55f;
+                break;
+            case ROAD_SLAB:
+                this.r = 0.30f; this.g = 0.30f; this.b = 0.32f;
+                break;
+            case BRIDGE:
+                this.r = 0.42f; this.g = 0.30f; this.b = 0.18f; // weathered wood
+                break;
+            case CRATE:
+                this.r = 0.55f; this.g = 0.42f; this.b = 0.25f;
+                break;
+            case LAMP:
+                this.r = 0.30f; this.g = 0.32f; this.b = 0.36f;
                 break;
         }
     }

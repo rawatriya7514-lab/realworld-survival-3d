@@ -12,7 +12,7 @@ Genre: third-person open-world action-adventure.
 Platform: Android ( GLES2, minSdk 24 ). Session length: 45–60 min story + free roam.
 
 ## 2. World
-One continuous 864 × 864 m map, streamed in 64 m chunks:
+One continuous 896 × 896 m map (−448…+448), streamed in 64 m chunks:
 
 | Region | ID | Feel | Key locations |
 |---|---|---|---|

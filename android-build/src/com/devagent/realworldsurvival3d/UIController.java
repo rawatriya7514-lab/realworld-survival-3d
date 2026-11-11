@@ -25,7 +25,9 @@ import android.widget.TextView;
 public class UIController {
 
     public interface Callbacks {
-        void onStartNewGame();
+        void onStartParkour();
+        void onStartOpenWorld();
+        void onRetryActiveMode();
         void onContinueGame();
         void onResumeRequested();
         void onRestartMission();
@@ -263,7 +265,7 @@ public class UIController {
     private LinearLayout buildMainMenu() {
         LinearLayout panel = panelBase(Gravity.CENTER);
         TextView title = menuTitle("REALWORLD\nSURVIVAL 3D");
-        TextView sub = menuSubtitle("Rooftop parkour survival - Original game by DevAgent");
+        TextView sub = menuSubtitle("Open world + rooftop parkour - Original game by DevAgent");
         panel.addView(title);
         panel.addView(sub);
 
@@ -274,7 +276,8 @@ public class UIController {
         best.setGravity(Gravity.CENTER);
         panel.addView(best, wrapHeight(dp(8)));
 
-        panel.addView(menuButton("New Run", new Click() { public void go() { callbacks.onStartNewGame(); } }), btnLp());
+        panel.addView(menuButton("Open World", new Click() { public void go() { callbacks.onStartOpenWorld(); } }), btnLp());
+        panel.addView(menuButton("Rooftop Parkour", new Click() { public void go() { callbacks.onStartParkour(); } }), btnLp());
         continueBtn = menuButton("Continue", new Click() { public void go() { callbacks.onContinueGame(); } });
         panel.addView(continueBtn, btnLp());
         panel.addView(menuButton("Settings", new Click() { public void go() { openSettingsFrom("main"); } }), btnLp());
@@ -351,7 +354,7 @@ public class UIController {
         TextView stats = menuSubtitle("");
         stats.setId(R_ID_OVER_STATS);
         panel.addView(stats, wrapHeight(dp(10)));
-        panel.addView(menuButton("Retry Mission", new Click() { public void go() { callbacks.onStartNewGame(); } }), btnLp());
+        panel.addView(menuButton("Retry", new Click() { public void go() { callbacks.onRetryActiveMode(); } }), btnLp());
         panel.addView(menuButton("Main Menu", new Click() { public void go() { callbacks.onQuitToMenu(); } }), btnLp());
         return panel;
     }
@@ -364,7 +367,7 @@ public class UIController {
         TextView stats = menuSubtitle("");
         stats.setId(R_ID_MC_STATS);
         panel.addView(stats, wrapHeight(dp(10)));
-        TextView cont = menuButton("Next Mission", new Click() { public void go() { callbacks.onStartNewGame(); } });
+        TextView cont = menuButton("Next Mission", new Click() { public void go() { callbacks.onStartParkour(); } });
         cont.setId(R_ID_MC_CONTINUE);
         panel.addView(cont, btnLp());
         panel.addView(menuButton("Main Menu", new Click() { public void go() { callbacks.onQuitToMenu(); } }), btnLp());
@@ -376,7 +379,13 @@ public class UIController {
         panel.addView(menuTitle("ABOUT"));
         TextView body = menuSubtitle(
                 "REALWORLD SURVIVAL 3D\n" +
-                "An original rooftop survival-parkour adventure.\n\n" +
+                "An original open-world + parkour adventure.\n\n" +
+                "OPEN WORLD\n" +
+                "Explore an 896 m x 896 m living world: city core with a road\n" +
+                "grid, residential blocks, a riverside village with a bridge\n" +
+                "over the river, the west forest and the northern hills. Day\n" +
+                "roam is free; landmarks appear as you discover them.\n\n" +
+                "ROOFTOP PARKOUR\n" +
                 "You are a courier runner trapped in a locked-down high-rise\n" +
                 "district at dusk. Cross the towers, recover survival supplies\n" +
                 "and data drives, avoid the infected stalkers, and signal the\n" +

@@ -33,9 +33,15 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     public enum GameState { MENU, PLAYING, PAUSED, GAMEOVER, MISSION_COMPLETE }
     private GameState currentState = GameState.MENU;
 
+    /** Game selected from the main menu; drives update/render routing. */
+    public enum GameMode { PARKOUR, OPEN_WORLD }
+    private GameMode activeMode = GameMode.PARKOUR;
+
     // Core Systems
     private Player player;
     private WorldMap worldMap;
+    private OpenWorld openWorld;   // non-null only in OPEN_WORLD mode
+    private Terrain terrain;       // non-null only in OPEN_WORLD mode
     private List<HunterEnemy> chasers;
     private List<Item> items;
     private WorldRenderer worldRenderer;
@@ -131,6 +137,10 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     // =================================================================
     public void spawnMissions(int missionIndex) {
         currentMission = missionIndex;
+        activeMode = GameMode.PARKOUR;
+        openWorld = null;         // release open-world memory
+        terrain = null;
+        player.terrain = null;    // restore classic parkour collision
         itemsCollected = 0;
         missionTimer = 0f;
         beaconActivated = false;
@@ -227,6 +237,141 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     }
 
     // =================================================================
+    // Open world mode
+    // =================================================================
+    /** Starts a free-roam session in the open world (GL thread). */
+    public void startOpenWorld() {
+        activeMode = GameMode.OPEN_WORLD;
+        openWorld = new OpenWorld();
+        terrain = new Terrain();
+
+        itemsCollected = 0;
+        requiredItems = 0;
+        missionTimer = 0f;
+        beaconActivated = false;
+        interactPrompt = null;
+        toastMessage = null;
+        toastTimer = 0f;
+
+        // Spawn on the street just south of the Safehouse, facing the city
+        float ground = Terrain.heightAt(210f, 44f);
+        player.x = 210f;
+        player.y = ground + 0.1f;
+        player.z = 44f;
+        player.vx = 0f;
+        player.vy = 0f;
+        player.vz = 0f;
+        player.yaw = -90f;    // look west toward Market Street
+        player.pitch = 0f;
+        player.health = 100f;
+        player.stamina = 100f;
+        player.adrenaline = 0f;
+        player.score = 0;
+        player.currency = 0;
+        player.state = Player.ParkourState.STAND;
+        player.isGrounded = true;
+        player.firstPersonView = false;
+        player.currentHeight = player.standingHeight;
+        player.peakFallY = player.y;
+        player.canDoubleJump = true;
+        player.terrain = terrain;
+        player.waterLevel = Terrain.WATER_LEVEL;
+        lastPlayerHealth = player.health;
+
+        chasers.clear();
+        items.clear();
+
+        missionTitle = "Free Roam: The Long Signal";
+        missionGoal = "Explore the city and countryside. Landmarks get discovered.";
+
+        currentState = GameState.PLAYING;
+        openWorld.recomputeActive(player.x, player.z);
+        audioManager.playMusic(MUSIC_MENU);
+    }
+
+    private void updateOpenWorld(float dt) {
+        openWorld.recomputeActive(player.x, player.z);
+        player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
+                touchInput.slidePressed, touchInput.sprintToggled, openWorld.activeObstacles());
+
+        // Invisible border: keep the player inside the 896 m world
+        if (player.x > 442f) { player.x = 442f; player.vx = 0f; }
+        if (player.x < -442f) { player.x = -442f; player.vx = 0f; }
+        if (player.z > 442f) { player.z = 442f; player.vz = 0f; }
+        if (player.z < -442f) { player.z = -442f; player.vz = 0f; }
+
+        processHealthFeedback(dt);
+        processPlayerSfx();
+
+        // Landmark discovery feedback
+        openWorld.discoverNear(player.x, player.z);
+        if (openWorld.lastDiscovered != null) {
+            toastMessage = "Discovered: " + openWorld.lastDiscovered;
+            toastTimer = 2.5f;
+            openWorld.lastDiscovered = null;
+            vibrate(30);
+        }
+
+        // Fatal-drop safety net (deep water is blocked, so this rarely fires)
+        if (player.state == Player.ParkourState.DEAD || player.y < -9f) {
+            gameOver();
+            return;
+        }
+
+        if (ui != null) {
+            ui.setHudMission(missionTitle, missionGoal);
+            ui.setHudStats("Region: " + OpenWorld.regionAt(player.x, player.z).display
+                    + "   Score " + player.score);
+            String prompt = toastTimer > 0f ? toastMessage : null;
+            if (prompt == null && player.actionNotifyTimer > 0f) {
+                prompt = player.lastParkourAction;
+            }
+            ui.setHudPrompt(prompt);
+        }
+        touchInput.resetFrameButtons();
+    }
+
+    /** Shared by both modes: damage flash, regen, breath/heartbeat audio. */
+    private void processHealthFeedback(float dt) {
+        if (player.health < lastPlayerHealth) {
+            if (ui != null) ui.flashDamage();
+            vibrate(35);
+            regenDelay = 6f;
+        }
+        lastPlayerHealth = player.health;
+        if (player.health > 0 && player.health < player.maxHealth) {
+            if (regenDelay > 0f) regenDelay -= dt;
+            else player.health = Math.min(player.maxHealth, player.health + 6f * dt);
+        }
+
+        // Stamina / health breathing & heartbeat loops
+        if (player.stamina < 20f && player.isGrounded) {
+            audioManager.startHeavyBreathing();
+        } else {
+            audioManager.stopHeavyBreathing();
+        }
+        if (player.health < 30f) {
+            audioManager.startHeartbeat();
+        } else {
+            audioManager.stopHeartbeat();
+        }
+    }
+
+    /** Shared by both modes: consumes the Player SFX trigger flags. */
+    private void processPlayerSfx() {
+        if (player.playJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_JUMP); player.playJumpSfx = false; }
+        if (player.playDoubleJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_DOUBLE_JUMP); player.playDoubleJumpSfx = false; }
+        if (player.playWallRunSfx) { audioManager.playSfx(GameAudioManager.SFX_WALLRUN); player.playWallRunSfx = false; }
+        if (player.playVaultSfx) { audioManager.playSfx(GameAudioManager.SFX_VAULT); player.playVaultSfx = false; }
+        if (player.playLedgeGrabSfx) { audioManager.playSfx(GameAudioManager.SFX_LEDGE_GRAB); player.playLedgeGrabSfx = false; }
+        if (player.playMantleSfx) { audioManager.playSfx(GameAudioManager.SFX_MANTLE); player.playMantleSfx = false; }
+        if (player.playSlideSfx) { audioManager.playSfx(GameAudioManager.SFX_SLIDE); player.playSlideSfx = false; }
+        if (player.playRollSfx) { audioManager.playSfx(GameAudioManager.SFX_ROLL); player.playRollSfx = false; }
+        if (player.playHardLandSfx) { audioManager.playSfx(GameAudioManager.SFX_HARD_LAND); player.playHardLandSfx = false; }
+        if (player.playFootstepSfx) { audioManager.playSfx(GameAudioManager.SFX_FOOTSTEP); player.playFootstepSfx = false; }
+    }
+
+    // =================================================================
     // GL lifecycle
     // =================================================================
     @Override
@@ -278,8 +423,12 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
 
         if (worldRenderer != null && touchInput != null) {
-            worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
-                    currentState, beaconPulse);
+            if (activeMode == GameMode.OPEN_WORLD) {
+                worldRenderer.renderOpenWorld(gl, player, openWorld, touchInput, currentState);
+            } else {
+                worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
+                        currentState, beaconPulse);
+            }
         }
 
         // Optional FPS limit (30): block the GL thread past the frame budget
@@ -317,45 +466,21 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             player.firstPersonView = !player.firstPersonView;
         }
 
+        // Open-world mode has its own loop (parkour flow continues below)
+        if (activeMode == GameMode.OPEN_WORLD) {
+            updateOpenWorld(dt);
+            return;
+        }
+
         // Player physics
         player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
                 touchInput.slidePressed, touchInput.sprintToggled, worldMap.obstacles);
 
-        // Health feedback
-        if (player.health < lastPlayerHealth) {
-            if (ui != null) ui.flashDamage();
-            vibrate(35);
-            regenDelay = 6f;
-        }
-        lastPlayerHealth = player.health;
-        if (player.health > 0 && player.health < player.maxHealth) {
-            if (regenDelay > 0f) regenDelay -= dt;
-            else player.health = Math.min(player.maxHealth, player.health + 6f * dt);
-        }
+        // Health feedback & survival audio (shared with open world)
+        processHealthFeedback(dt);
 
         // SFX triggers
-        if (player.playJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_JUMP); player.playJumpSfx = false; }
-        if (player.playDoubleJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_DOUBLE_JUMP); player.playDoubleJumpSfx = false; }
-        if (player.playWallRunSfx) { audioManager.playSfx(GameAudioManager.SFX_WALLRUN); player.playWallRunSfx = false; }
-        if (player.playVaultSfx) { audioManager.playSfx(GameAudioManager.SFX_VAULT); player.playVaultSfx = false; }
-        if (player.playLedgeGrabSfx) { audioManager.playSfx(GameAudioManager.SFX_LEDGE_GRAB); player.playLedgeGrabSfx = false; }
-        if (player.playMantleSfx) { audioManager.playSfx(GameAudioManager.SFX_MANTLE); player.playMantleSfx = false; }
-        if (player.playSlideSfx) { audioManager.playSfx(GameAudioManager.SFX_SLIDE); player.playSlideSfx = false; }
-        if (player.playRollSfx) { audioManager.playSfx(GameAudioManager.SFX_ROLL); player.playRollSfx = false; }
-        if (player.playHardLandSfx) { audioManager.playSfx(GameAudioManager.SFX_HARD_LAND); player.playHardLandSfx = false; }
-        if (player.playFootstepSfx) { audioManager.playSfx(GameAudioManager.SFX_FOOTSTEP); player.playFootstepSfx = false; }
-
-        // Stamina / health breathing & heartbeat loops
-        if (player.stamina < 20f && player.isGrounded) {
-            audioManager.startHeavyBreathing();
-        } else {
-            audioManager.stopHeavyBreathing();
-        }
-        if (player.health < 30f) {
-            audioManager.startHeartbeat();
-        } else {
-            audioManager.stopHeartbeat();
-        }
+        processPlayerSfx();
 
         // Chasers
         for (HunterEnemy chaser : chasers) {
@@ -534,7 +659,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (currentState != GameState.PLAYING) return;
         currentState = GameState.PAUSED;
         audioManager.pause();
-        saveProgress();
+        if (activeMode == GameMode.PARKOUR) {
+            saveProgress(); // open-world persistence arrives with the save phase
+        }
         if (ui != null) {
             ui.showMenu("pause");
             if (ui != null) ui.notifySaved();
@@ -572,8 +699,21 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     // =================================================================
     // UIController callbacks (called on the UI thread)
     // =================================================================
-    @Override public void onStartNewGame() {
+    @Override public void onStartParkour() {
         queue(new Runnable() { public void run() { spawnMissions(currentMission); } });
+    }
+
+    @Override public void onStartOpenWorld() {
+        queue(new Runnable() { public void run() { startOpenWorld(); } });
+    }
+
+    @Override public void onRetryActiveMode() {
+        queue(new Runnable() {
+            public void run() {
+                if (activeMode == GameMode.OPEN_WORLD) startOpenWorld();
+                else spawnMissions(currentMission);
+            }
+        });
     }
 
     @Override public void onContinueGame() {
@@ -654,7 +794,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     // =================================================================
     public void activityPaused() {
         audioManager.pause();
-        if (currentState == GameState.PLAYING) {
+        if (currentState == GameState.PLAYING && activeMode == GameMode.PARKOUR) {
             saveProgress();
         }
     }

@@ -118,6 +118,14 @@ public class Player {
     public boolean playFootstepSfx = false;
     private float footstepTimer = 0f;
 
+    // ------------------------------------------------------------------
+    // Open-world terrain support (null = classic parkour behaviour).
+    // When set, the analytic heightfield is the ground and deep water is
+    // impassable; the update signature and parkour logic stay untouched.
+    // ------------------------------------------------------------------
+    public Terrain terrain = null;
+    public float waterLevel = Terrain.WATER_LEVEL;
+
     public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
                        boolean slidePressed, boolean sprintToggled, List<Obstacle> obstacles) {
         if (state == ParkourState.DEAD) return;
@@ -216,6 +224,15 @@ public class Player {
         float targetVx = (forwardX * -inputY + rightX * inputX) * speed;
         float targetVz = (forwardZ * -inputY + rightZ * inputX) * speed;
 
+        // Wading through water halves ground speed (open world only)
+        if (terrain != null) {
+            float depth = Terrain.waterDepthAt(x, z);
+            if (depth > 0.15f) {
+                targetVx *= 0.55f;
+                targetVz *= 0.55f;
+            }
+        }
+
         float accel = isGrounded ? 15f : 6f;
         vx += (targetVx - vx) * Math.min(1.0f, dt * accel);
         vz += (targetVz - vz) * Math.min(1.0f, dt * accel);
@@ -305,12 +322,31 @@ public class Player {
     }
 
     private void resolveWorldCollisions(float nx, float ny, float nz, List<Obstacle> obstacles, boolean slidePressed) {
+        // ---- Open world: block horizontal movement into deeper water ----
+        // Strictly-deeper steps are walls (no creep); equal depth (flat
+        // channel bottoms) and shallower moves stay allowed so nobody gets
+        // trapped. Only applies near/below the water surface: airborne jumps
+        // above the waterline stay free.
+        if (terrain != null) {
+            float curDepth = Terrain.waterDepthAt(x, z);
+            float nextDepth = Terrain.waterDepthAt(nx, nz);
+            if (ny < waterLevel + 0.4f
+                    && nextDepth > Terrain.WADE_MAX + 0.01f
+                    && nextDepth > curDepth + 0.0001f) {
+                nx = x;
+                nz = z;
+                vx = 0f;
+                vz = 0f;
+            }
+        }
+
         // ---- Pass 1: vertical landing on the highest surface we cross ----
         boolean groundHit = false;
         float floorY = -999f;
         Obstacle landedOn = null;
 
         for (Obstacle o : obstacles) {
+            if (!o.solid) continue; // road slabs, bushes, water: never floors
             if (o.containsXZ(nx, nz, radius * 0.7f)) {
                 float topY = o.getMaxY();
                 // If player was above or crossing the top surface while falling
@@ -321,6 +357,16 @@ public class Player {
                         landedOn = o;
                     }
                 }
+            }
+        }
+
+        // Terrain heightfield is a landing candidate in the open world
+        if (terrain != null) {
+            float th = Terrain.heightAt(nx, nz);
+            if (y >= th - 0.4f && ny <= th + 0.1f && vy <= 0f && th > floorY) {
+                floorY = th;
+                groundHit = true;
+                landedOn = null;
             }
         }
 
