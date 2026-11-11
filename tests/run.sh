@@ -33,6 +33,8 @@ javac -Xlint:-options -d "$OUT" \
     "$S/Vehicle.java" \
     "$S/AudioMixer.java" \
     "$S/SettingsConfig.java" \
+    "$S/SaveState.java" \
+    "$S/SaveFileManager.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
@@ -45,7 +47,8 @@ javac -Xlint:-options -d "$OUT" \
     "$ROOT/tests/AITest.java" \
     "$ROOT/tests/MissionTest.java" \
     "$ROOT/tests/InventoryVehicleTest.java" \
-    "$ROOT/tests/AudioSettingsTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/AudioSettingsTest.java" \
+    "$ROOT/tests/SaveLoadTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -60,3 +63,4 @@ java -cp "$OUT" AITest
 java -cp "$OUT" MissionTest
 java -cp "$OUT" InventoryVehicleTest
 java -cp "$OUT" AudioSettingsTest
+java -cp "$OUT" SaveLoadTest

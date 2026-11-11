@@ -531,8 +531,53 @@ Test results (real, this session):
 Known phase-11 limitations (tracked, see KNOWN_ISSUES.md):
 - Game state persistence (player stats, completed quests, inventory, vehicle coordinates) planned for Phase 12.
 
-### PHASE 12 — Save/load — PLANNED
-- Versioned game save/load persistence, atomic file write, corruption recovery.
+### PHASE 12 — Save/load (2026-11-11) — DONE
+Scope: Full versioned game state snapshot persistence (`SaveState.java`), CRC32 checksum
+integrity verification and corruption detection, atomic filesystem persistence (`SaveFileManager.java`)
+with `.tmp` staging and `.bak` rotation, automatic recovery from corrupted saves, seamless
+restoration of player position/stats, story mission progression, discovered POIs, backpack
+inventory slots, vehicle locations, and day/night clock across both Open-World and Parkour modes.
+
+What was built (all original code):
+- `SaveState.java` (new, pure Java): complete versioned snapshot model; CRC32 checksum calculation
+  over serialized payload string; corruption detection raising `CorruptedSaveException`;
+  support for both game modes (0 = PARKOUR, 1 = OPEN_WORLD); player attributes (x, y, z, yaw,
+  health, maxHealth, stamina, adrenaline, score, currency, bestScore); story progression
+  (storyMissionIndex, currentCount, timer, storyCompleted, dataSlatesCollected, 5-element status array);
+  discovered POI list; 12-slot inventory; day/night time and weather; active vehicle and all
+  vehicle states (name, x, y, z, yaw, health).
+- `SaveFileManager.java` (new, pure Java): atomic file operations; writes to `.tmp` file and flushes
+  physical disk descriptor (`getFD().sync()`); rotates existing save to `.bak`; atomic rename
+  to `.dat`; automatic fault-tolerant loading detecting payload corruption or checksum failure
+  and seamlessly recovering clean state from `.bak` backup.
+- `SaveManager.java` updates: connects `SaveFileManager` to Android files directory
+  (`rwsurvival_save.dat`), while preserving backward-compatible SharedPreferences access.
+- `MissionManager.java` updates: added `restoreState(missionIndex, currentCount, timer, completed,
+  slatesCount, slatesCollected)` for clean quest restoration.
+- `Inventory.java` updates: added `clear()` allowing clean slot deserialization.
+- `GameView.java` updates: expanded `saveProgress()` to capture complete dual-mode snapshot;
+  expanded `onContinueGame()` to load from `saveManager.loadGameState()` and reconstruct player,
+  inventory, open-world missions, discovered landmarks, and drivable vehicles; added auto-save on
+  landmark discovery, mission completion, data slate collection, and pause/quit events.
+- Tests: `tests/SaveLoadTest.java` (11 groups, 87 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**, InventoryVehicleTest
+  **51 passed / 0 failed**, AudioSettingsTest **142 passed / 0 failed**, SaveLoadTest
+  **87 passed / 0 failed**. Total: **3,197 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 38 classes).
+- APK: built, 22,458,892 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 3197/0.
+
+Known phase-12 limitations (tracked, see KNOWN_ISSUES.md):
+- Performance profiling and render batching verification planned for Phase 13.
+
 ### PHASE 13 — Optimization — PLANNED
+- Render batching, frustum culling verification, allocation budget, 60 FPS profile.
 ### PHASE 14 — Final QA — PLANNED
 ### PHASE 15 — APK release — PLANNED

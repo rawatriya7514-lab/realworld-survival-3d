@@ -327,6 +327,35 @@ public class MissionManager {
         }
     }
 
+    public void restoreState(int missionIndex, int currentCount, float timer, boolean completed,
+                             int slatesCount, boolean[] slatesCollected) {
+        this.currentMissionIndex = Math.max(0, Math.min(missions.size(), missionIndex));
+        this.storyCompleted = completed;
+        this.dataSlatesCollected = slatesCount;
+
+        for (int i = 0; i < missions.size(); i++) {
+            Mission m = missions.get(i);
+            if (i < this.currentMissionIndex) {
+                m.isCompleted = true;
+                m.isActive = false;
+            } else if (i == this.currentMissionIndex && !completed) {
+                m.isCompleted = false;
+                m.isActive = true;
+                m.currentCount = currentCount;
+                m.timer = timer;
+            } else {
+                m.isCompleted = false;
+                m.isActive = false;
+            }
+        }
+
+        if (slatesCollected != null) {
+            for (int i = 0; i < dataSlates.size() && i < slatesCollected.length; i++) {
+                dataSlates.get(i).collected = slatesCollected[i];
+            }
+        }
+    }
+
     public String getHudTitle() {
         if (storyCompleted) return "The Long Signal: Transmitted";
         Mission m = getCurrentMission();

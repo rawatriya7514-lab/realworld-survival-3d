@@ -574,3 +574,52 @@ Defects found & fixed during this phase (real, encountered while testing):
 1. In `AudioSettingsTest.java`, initial vehicle collision test executed a small dt loop from 0 speed following a handbrake engagement, stopping short of the wall → set forward test speed to 18.0 m/s with direct wall displacement.
 2. In `GameSettings.java`, needed backward-compatibility with existing code expecting `QUALITY_PERFORMANCE` → maintained alias mapped to `QUALITY_LOW`.
 3. In `WorldRenderer.java`, `shadowsEnabled` was previously overwritten unconditionally by `DayNightCycle` preset → added `userShadowsEnabled` guard so user settings override preset state.
+
+## Phase 12 — Save/Load Persistence (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager,
+  Inventory, Vehicle, AudioMixer, SettingsConfig, SaveState, SaveFileManager + 14 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Inventory & Vehicles JVM suite (`InventoryVehicleTest`) | **PASS** — 51 checks, 0 failures | Stacking, consumables, vehicle physics, roadkill ramming |
+| Audio & Settings JVM suite (`AudioSettingsTest`) | **PASS** — 142 checks, 0 failures | Mixing, dB conversions, 3D spatial pan, engine pitch, config |
+| Save/Load Persistence JVM suite (`SaveLoadTest`) | **PASS** — 87 checks, 0 failures | CRC32 verification, atomic writes, backup recovery, full state |
+| Total JVM test suite | **PASS** — 3,197 checks, 0 failures | Zero regressions across all 14 test suites |
+| Full Android compile (all 38 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,458,892 bytes | step [6/6] + apksigner output |
+| On-device runtime (continue button, auto-save HUD toast) | **NOT TESTED** | No adb in environment; physical install pending |
+
+SaveLoadTest groups (87 checks):
+1. **SaveState default values**: Version check, timestamp, full health and stamina, clean story state.
+2. **SaveState serialization & CRC32 verification**: Formatting with valid header, CRC32 hex signature, deserialization value matching.
+3. **CRC32 corruption detection**: Single byte payload tamper rejection, modified CRC rejection, truncated save rejection.
+4. **Open-World full snapshot fidelity**: Player transform and stats, story mission progression, 5-element data slate array, discovered landmarks, 12 inventory slots, day/night cycle clock, and vehicle transforms.
+5. **Parkour campaign fidelity**: Campaign mission progression, completed count, collected tokens.
+6. **SaveFileManager atomic file save**: Staging in .tmp, syncing physical descriptor, atomically replacing target file.
+7. **SaveFileManager backup rotation**: Preserving previous healthy state in .bak file upon subsequent saves.
+8. **SaveFileManager automatic corruption recovery**: Detecting damaged/corrupted primary file and automatically healing state from backup .bak file.
+9. **MissionManager state restoration**: Reconstructing mission list completion, active objective progress, and collected slates.
+10. **Inventory state restoration**: Clearing initial backpack loadout and restoring saved items and counts.
+11. **SaveFileManager cleanup**: Atomic deletion of .dat, .bak, and .tmp files.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Duplicate definitions of `getDataSlates()` and `getMissions()` in `MissionManager.java` prevented compilation → eliminated redundant duplicate definitions.
+2. Added `Inventory.clear()` method to enable wiping initial loadout when restoring custom saved slot loadout.

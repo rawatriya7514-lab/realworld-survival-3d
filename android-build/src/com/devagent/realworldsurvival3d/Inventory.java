@@ -49,6 +49,10 @@ public class Inventory {
         return slots.size();
     }
 
+    public void clear() {
+        slots.clear();
+    }
+
     public boolean hasSpaceFor(Item.Type type, int count) {
         int maxStack = getMaxStack(type);
         int remaining = count;

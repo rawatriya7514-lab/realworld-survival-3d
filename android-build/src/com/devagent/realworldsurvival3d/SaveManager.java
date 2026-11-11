@@ -2,18 +2,55 @@ package com.devagent.realworldsurvival3d;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.io.File;
 
 /**
- * SaveManager - Handles save/load using SharedPreferences (manual key-value).
+ * SaveManager - Handles robust game persistence.
+ * Combines atomic file writes with CRC32 integrity verification and backup rotation (via SaveFileManager),
+ * while preserving backward-compatible SharedPreferences access for high scores and legacy saves.
  */
 public class SaveManager {
     private static final String PREFS_NAME = "RWSurvivalSave";
-    private SharedPreferences prefs;
+    private static final String SAVE_FILENAME = "rwsurvival_save.dat";
+
+    private final SharedPreferences prefs;
+    private final File saveFile;
 
     public SaveManager(Context context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        saveFile = new File(context.getFilesDir(), SAVE_FILENAME);
     }
 
+    /** Atomically saves the complete game snapshot to disk. */
+    public boolean saveGameState(SaveState state) {
+        if (state == null) return false;
+        // Also update high score in SharedPreferences
+        if (state.bestScore > loadInt("best_score", 0)) {
+            saveInt("best_score", state.bestScore);
+        }
+        return SaveFileManager.saveAtomic(saveFile, state);
+    }
+
+    /** Loads and verifies game state from primary file or automatic .bak recovery. */
+    public SaveState loadGameState() {
+        return SaveFileManager.loadSafe(saveFile);
+    }
+
+    public boolean hasSave() {
+        return SaveFileManager.hasValidSave(saveFile) || prefs.contains("player_health")
+                || prefs.getInt("current_mission", -1) > 0;
+    }
+
+    public void clear() {
+        SaveFileManager.deleteSave(saveFile);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.clear();
+        editor.apply();
+    }
+
+    // -----------------------------------------------------------------
+    // Legacy SharedPreferences operations (backward-compatible)
+    // -----------------------------------------------------------------
     public void saveFloat(String key, float value) {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putFloat(key, value);
@@ -42,15 +79,5 @@ public class SaveManager {
 
     public String loadString(String key, String defaultValue) {
         return prefs.getString(key, defaultValue);
-    }
-
-    public boolean hasSave() {
-        return prefs.contains("player_health");
-    }
-
-    public void clear() {
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.clear();
-        editor.apply();
     }
 }

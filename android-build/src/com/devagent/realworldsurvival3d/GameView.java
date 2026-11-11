@@ -427,6 +427,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             toastTimer = 2.5f;
             openWorld.lastDiscovered = null;
             vibrate(30);
+            saveProgress();
+            if (ui != null) ui.notifySaved();
         }
 
         // Fatal-drop safety net (deep water is blocked, so this rarely fires)
@@ -448,8 +450,12 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             toastTimer = missionManager.toastTimer;
             if (toastMessage.startsWith("Mission") || toastMessage.contains("Completed") || toastMessage.contains("Signal Transmitted")) {
                 audioManager.playSfx(GameAudioManager.SFX_QUEST_COMPLETE);
+                saveProgress();
+                if (ui != null) ui.notifySaved();
             } else if (toastMessage.contains("Data Slate")) {
                 audioManager.playSfx(GameAudioManager.SFX_DATA_SLATE);
+                saveProgress();
+                if (ui != null) ui.notifySaved();
             }
             missionManager.lastToast = null;
             vibrate(35);
@@ -873,12 +879,10 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (currentState != GameState.PLAYING) return;
         currentState = GameState.PAUSED;
         audioManager.pause();
-        if (activeMode == GameMode.PARKOUR) {
-            saveProgress(); // open-world persistence arrives with the save phase
-        }
+        saveProgress();
         if (ui != null) {
             ui.showMenu("pause");
-            if (ui != null) ui.notifySaved();
+            ui.notifySaved();
         }
     }
 
@@ -899,6 +903,64 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
     /** Save the current run for Continue. */
     private void saveProgress() {
+        SaveState s = new SaveState();
+        s.gameMode = (activeMode == GameMode.OPEN_WORLD) ? 1 : 0;
+        s.playerX = player.x;
+        s.playerY = player.y;
+        s.playerZ = player.z;
+        s.playerYaw = player.yaw;
+        s.playerHealth = Math.max(1f, player.health);
+        s.playerMaxHealth = player.maxHealth;
+        s.playerStamina = player.stamina;
+        s.playerAdrenaline = player.adrenaline;
+        s.score = player.score;
+        s.currency = player.currency;
+        s.bestScore = Math.max(player.score, saveManager.loadInt("best_score", 0));
+
+        s.parkourCurrentMission = currentMission;
+        s.parkourCompletedMissions = completedMissions;
+        s.itemsCollected = itemsCollected;
+
+        if (activeMode == GameMode.OPEN_WORLD && openWorld != null) {
+            s.storyMissionIndex = missionManager.getCurrentMissionIndex();
+            Mission curM = missionManager.getCurrentMission();
+            if (curM != null) {
+                s.storyCurrentCount = curM.currentCount;
+                s.storyTimer = curM.timer;
+            }
+            s.storyCompleted = missionManager.storyCompleted;
+            s.dataSlatesCollected = missionManager.dataSlatesCollected;
+            List<Item> slates = missionManager.getDataSlates();
+            for (int i = 0; i < slates.size() && i < s.dataSlatesStatus.length; i++) {
+                s.dataSlatesStatus[i] = slates.get(i).collected;
+            }
+
+            for (OpenWorld.Poi p : openWorld.pois) {
+                if (p.discovered) s.discoveredPoiNames.add(p.name);
+            }
+
+            s.dayNightTime = dayNight.timeOfDay;
+            s.weatherPreset = dayNight.currentWeather.ordinal();
+
+            if (activeVehicle != null) {
+                s.activeVehicleIndex = openWorld.vehicles.indexOf(activeVehicle);
+            } else {
+                s.activeVehicleIndex = -1;
+            }
+
+            for (Vehicle v : openWorld.vehicles) {
+                s.vehicles.add(new SaveState.VehicleState(v.name, v.x, v.y, v.z, v.yaw, v.health));
+            }
+        }
+
+        // Inventory
+        for (Inventory.Slot slot : inventory.getSlots()) {
+            s.inventorySlots.add(new SaveState.SlotEntry(slot.type.name(), slot.count));
+        }
+
+        saveManager.saveGameState(s);
+
+        // Also write legacy keys for backward-compatibility
         saveManager.saveInt("current_mission", currentMission);
         saveManager.saveInt("completed_missions", completedMissions);
         saveManager.saveInt("score", player.score);
@@ -907,7 +969,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         saveManager.saveFloat("player_health", Math.max(1f, player.health));
         saveManager.saveString("mission_title", missionTitle);
         saveManager.saveString("mission_goal", missionGoal);
-        saveManager.saveInt("best_score", saveManager.loadInt("best_score", 0));
+        saveManager.saveInt("best_score", s.bestScore);
     }
 
     // =================================================================
@@ -933,10 +995,72 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     @Override public void onContinueGame() {
         queue(new Runnable() {
             public void run() {
-                player.score = saveManager.loadInt("score", 0);
-                player.currency = saveManager.loadInt("currency", 0);
-                completedMissions = saveManager.loadInt("completed_missions", 0);
-                spawnMissions(saveManager.loadInt("current_mission", 1));
+                SaveState s = saveManager.loadGameState();
+                if (s != null) {
+                    player.score = s.score;
+                    player.currency = s.currency;
+                    player.health = s.playerHealth;
+                    player.stamina = s.playerStamina;
+                    player.adrenaline = s.playerAdrenaline;
+
+                    // Restore inventory
+                    inventory.clear();
+                    for (SaveState.SlotEntry se : s.inventorySlots) {
+                        try {
+                            Item.Type t = Item.Type.valueOf(se.typeName);
+                            inventory.addItem(t, se.count);
+                        } catch (Exception ignored) {}
+                    }
+
+                    if (s.gameMode == 1) { // OPEN_WORLD
+                        startOpenWorld();
+                        player.x = s.playerX;
+                        player.y = s.playerY;
+                        player.z = s.playerZ;
+                        player.yaw = s.playerYaw;
+
+                        // Restore mission state
+                        missionManager.restoreState(s.storyMissionIndex, s.storyCurrentCount,
+                                s.storyTimer, s.storyCompleted, s.dataSlatesCollected, s.dataSlatesStatus);
+
+                        // Restore discovered POIs
+                        if (openWorld != null) {
+                            for (OpenWorld.Poi p : openWorld.pois) {
+                                if (s.discoveredPoiNames.contains(p.name)) {
+                                    p.discovered = true;
+                                }
+                            }
+                            // Restore vehicles
+                            for (int i = 0; i < s.vehicles.size() && i < openWorld.vehicles.size(); i++) {
+                                SaveState.VehicleState vs = s.vehicles.get(i);
+                                Vehicle v = openWorld.vehicles.get(i);
+                                v.x = vs.x;
+                                v.y = vs.y;
+                                v.z = vs.z;
+                                v.yaw = vs.yaw;
+                                v.health = vs.health;
+                            }
+                            if (s.activeVehicleIndex >= 0 && s.activeVehicleIndex < openWorld.vehicles.size()) {
+                                Vehicle v = openWorld.vehicles.get(s.activeVehicleIndex);
+                                if (v.enter(player)) {
+                                    activeVehicle = v;
+                                }
+                            }
+                        }
+
+                        // Restore day/night clock
+                        dayNight.timeOfDay = s.dayNightTime;
+                    } else { // PARKOUR
+                        completedMissions = s.parkourCompletedMissions;
+                        itemsCollected = s.itemsCollected;
+                        spawnMissions(s.parkourCurrentMission);
+                    }
+                } else {
+                    player.score = saveManager.loadInt("score", 0);
+                    player.currency = saveManager.loadInt("currency", 0);
+                    completedMissions = saveManager.loadInt("completed_missions", 0);
+                    spawnMissions(saveManager.loadInt("current_mission", 1));
+                }
             }
         });
     }
@@ -1008,7 +1132,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     // =================================================================
     public void activityPaused() {
         audioManager.pause();
-        if (currentState == GameState.PLAYING && activeMode == GameMode.PARKOUR) {
+        if (currentState == GameState.PLAYING) {
             saveProgress();
         }
     }

@@ -40,10 +40,13 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 11)
-1. **Game State Save/Load Persistence** — Full game state persistence (player coordinates, health, stamina, score, currency, quest progress, inventory slots, data slates, vehicle locations) with atomic write and corruption recovery planned for Phase 12.
+## Open issues (Phase 12)
+1. **Performance Profiling & Frustum Culling Audit** — Batch rendering, VBO allocation audit (zero allocations per frame), and 60 FPS budget verification planned for Phase 13.
 
 ## Resolved during development
+- PHASE 12: Full versioned game save/load persistence (`SaveState.java`, `SaveFileManager.java`),
+  CRC32 checksum validation, atomic staging with `.tmp` and `.bak` rotation, automatic recovery
+  from corrupted saves, and full state restoration for Open-World and Parkour campaign modes.
 - PHASE 11: Audio engine (`AudioMixer.java`), Master/Music/SFX volume controls, vehicle engine
   speed-pitch modulation and skid/crash SFX, NPC greeting chirps, quest fanfare, combat hits,
   data slate chimes, 3D spatial attenuation and stereo panning, pure Java `SettingsConfig.java`,
