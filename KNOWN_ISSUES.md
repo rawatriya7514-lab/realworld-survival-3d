@@ -70,3 +70,10 @@ Maintained per phase; nothing is hidden.
   left-handed layout mirroring (joystick on right, buttons on left), joystick sensitivity
   multiplier (0.5x-1.5x), non-overlapping pairwise disjoint button positioning,
   and settings menu scroll container. Details: TEST_REPORT.md §Phase 5.
+- PHASE 6: world map road network (`RoadNetwork.java`) with 33 nodes and Dijkstra
+  shortest paths across regions and river bridge; step-by-step waypoint progression
+  and dynamic auto-rerouting on >12m deviation (`NavigationTracker.java`); 896m
+  viewport projection engine (`MapViewController.java`) with anchor-stable pan/zoom,
+  rotating HUD minimap (heading straight UP), cardinal compass rim indicators,
+  POI snapping, tap-to-set waypoint routing, 3D waypoint beacon beam, and fullscreen
+  interactive 2D map overlay. Details: TEST_REPORT.md §Phase 6.

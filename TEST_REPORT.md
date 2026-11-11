@@ -236,12 +236,12 @@ Commands executed this session:
 | Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
 | Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
 | Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
-| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 36 checks, 0 failures | See test groups below |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | See test groups below |
 | Full Android compile (all 23 classes incl. TouchLayout) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
 | APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,032,270 bytes | step [6/6] + apksigner output |
 | On-device runtime (touch latency, multi-touch feel) | **NOT TESTED** | No adb in environment; physical install pending |
 
-TouchLayoutTest groups (36 checks):
+TouchLayoutTest groups (37 checks):
 1. **Geometry & Scaling**: Proportional scaling across buttonScale (0.8x to 1.3x);
    strict clamping for out-of-range scale inputs (0.2x clamps to 0.8x, 2.5x clamps to 1.3x).
 2. **Opacity Clamping**: Button opacity clamped strictly within [0.4, 1.0].
@@ -257,6 +257,52 @@ TouchLayoutTest groups (36 checks):
 7. **Hit-testing precision**: Exact Euclidean distance hit-testing for all buttons;
    contextual interact button active only when `interactVisible = true`; screen center
    returns `ButtonType.NONE`.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Legacy button spacing factor (1.7*radius) between Jump and Vault/Slide caused
+   partial bounding circle overlap (dist=188.4px vs minSafe=199.8px) because the sum
+   of their radii was 1.85*radius → upgraded button cluster spacing to 1.95*radius,
+   ensuring complete pairwise disjoint separation across all buttons.
+
+## Phase 6 — World Map & Navigation (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController + 8 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Total JVM test suite | **PASS** — 2,756 checks, 0 failures | Zero regressions across all 8 test suites |
+| Full Android compile (all 26 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,040,462 bytes | step [6/6] + apksigner output |
+| On-device runtime (touch feel, GL minimap rendering) | **NOT TESTED** | No adb in environment; physical install pending |
+
+RoadNetworkTest groups (30 checks):
+1. **Graph connectivity & POIs**: 33 nodes across regions; bidirectional connectivity across city grid, bridge, workshop, watchtower, docks, and ranger hut.
+2. **Nearest-node queries**: Spatial lookup verified for Central Plaza, Workshop, and Watchtower coords.
+3. **Dijkstra routing**: Shortest-path routing computes valid multi-node routes across city and cross-river via bridge.
+4. **Blocked edges & unreachable destinations**: Edge blocking avoids obstructed roads; cross-river routing returns null safely without infinite loops or crashes; restored upon unblocking.
+5. **Waypoint progression & arrival**: Advances waypoint within 8.0m of current node; detects arrival within 5.0m.
+6. **Dynamic auto-rerouting**: Re-plans route automatically when deviation from planned corridor exceeds 12.0m.
+
+MapTest groups (58 checks):
+1. **Viewport setup & scaling**: Dimensions, zoom limits, button placement, left-handed mode mirroring.
+2. **Bijective projection**: Exact round-trip world <-> screen coordinates matching within 0.001m.
+3. **Pan & zoom mechanics**: Boundary clamping inside [-448, 448], zoom clamping [0.22, 3.50], focus anchor stability.
+4. **Rotating HUD minimap projection**: Player heading straight UP; cardinal North rotation on rim; range culling.
+5. **Button hit-testing**: Close, Center, Clear, Zoom In, Zoom Out, and minimap touch hit-testing.
+6. **Tap-to-waypoint & POI snapping**: Snaps to nearby POIs (e.g. Safehouse) within 28m; custom coords in open areas; triggers navigation tracker.
 
 Defects found & fixed during this phase (real, encountered while testing):
 1. Legacy button spacing factor (1.7*radius) between Jump and Vault/Slide caused

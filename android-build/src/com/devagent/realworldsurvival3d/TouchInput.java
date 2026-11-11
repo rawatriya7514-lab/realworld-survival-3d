@@ -1,6 +1,7 @@
 package com.devagent.realworldsurvival3d;
 
 import android.view.MotionEvent;
+import java.util.List;
 
 /**
  * TouchInput - Robust multi-touch controller handling:
@@ -53,8 +54,23 @@ public class TouchInput {
     public boolean slidePressed = false;
     public boolean sprintToggled = false;
     public boolean camTogglePressed = false;
+    public boolean mapPressed = false;
+    public boolean mapClosed = false;
     public boolean interactPressed = false;
     public boolean pausePressed = false;
+
+    // Fullscreen Map overlay state & bindings (Phase 6)
+    public boolean mapOverlayVisible = false;
+    public MapViewController mapController = null;
+    public RoadNetwork roadNetwork = null;
+    public NavigationTracker navigationTracker = null;
+    public List<OpenWorld.Poi> pois = null;
+    public float playerX = 0f, playerZ = 0f;
+
+    private int mapDragPointerId = -1;
+    private float lastMapDragX = 0f;
+    private float lastMapDragY = 0f;
+    private boolean mapHasDragged = false;
 
     /** Contextual visibility of the interact button (set by GameView). */
     public boolean interactVisible = false;
@@ -70,6 +86,7 @@ public class TouchInput {
     public float btnSlideX, btnSlideY, btnSlideRadius;
     public float btnSprintX, btnSprintY, btnSprintRadius;
     public float btnCamX, btnCamY, btnCamRadius;
+    public float btnMapX, btnMapY, btnMapRadius;
     public float btnInteractX, btnInteractY, btnInteractRadius;
     public float btnPauseX, btnPauseY, btnPauseRadius;
 
@@ -116,12 +133,22 @@ public class TouchInput {
         this.btnPauseY = layout.btnPauseY;
         this.btnPauseRadius = layout.btnPauseRadius;
 
+        this.btnMapX = layout.btnMapX;
+        this.btnMapY = layout.btnMapY;
+        this.btnMapRadius = layout.btnMapRadius;
+
         this.btnInteractX = layout.btnInteractX;
         this.btnInteractY = layout.btnInteractY;
         this.btnInteractRadius = layout.btnInteractRadius;
     }
 
     public void handleTouchEvent(MotionEvent event) {
+        // If the fullscreen interactive map is open, route all touches to MapViewController
+        if (mapOverlayVisible && mapController != null) {
+            handleMapTouchEvent(event);
+            return;
+        }
+
         int action = event.getActionMasked();
         int pointerIndex = event.getActionIndex();
         int pointerId = event.getPointerId(pointerIndex);
@@ -132,6 +159,12 @@ public class TouchInput {
                 float px = event.getX(pointerIndex);
                 float py = event.getY(pointerIndex);
 
+                // Tapping inside HUD Minimap disc opens the fullscreen map
+                if (mapController != null && mapController.isInsideMinimap(px, py)) {
+                    mapPressed = true;
+                    return;
+                }
+
                 // Check Action Buttons via TouchLayout
                 TouchLayout.ButtonType btn = layout.testButton(px, py, interactVisible);
                 switch (btn) {
@@ -141,6 +174,7 @@ public class TouchInput {
                     case SLIDE: slidePressed = true; return;
                     case SPRINT: sprintToggled = true; return;
                     case CAM: camTogglePressed = true; return;
+                    case MAP: mapPressed = true; return;
                     case INTERACT: interactPressed = true; return;
                     case PAUSE: pausePressed = true; return;
                     case NONE: break;
@@ -261,6 +295,130 @@ public class TouchInput {
         }
     }
 
+    private void handleMapTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        int pointerIndex = event.getActionIndex();
+        int pointerId = event.getPointerId(pointerIndex);
+
+        // When map is open, halt any player locomotion
+        moveX = 0f;
+        moveY = 0f;
+        isJoystickActive = false;
+        joystickPointerId = -1;
+        cameraPointerId = -1;
+
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                float px = event.getX(pointerIndex);
+                float py = event.getY(pointerIndex);
+
+                MapViewController.ButtonAction btn = mapController.testButtonClick(px, py);
+                switch (btn) {
+                    case CLOSE:
+                        mapClosed = true;
+                        return;
+                    case CENTER_PLAYER:
+                        mapController.centerOnPlayer(playerX, playerZ);
+                        return;
+                    case CLEAR_ROUTE:
+                        if (navigationTracker != null) {
+                            navigationTracker.clearDestination();
+                        }
+                        return;
+                    case ZOOM_IN:
+                        mapController.zoomIn();
+                        return;
+                    case ZOOM_OUT:
+                        mapController.zoomOut();
+                        return;
+                    case NONE:
+                        break;
+                }
+
+                if (mapDragPointerId == -1) {
+                    mapDragPointerId = pointerId;
+                    lastMapDragX = px;
+                    lastMapDragY = py;
+                    mapHasDragged = false;
+                } else if (zoomPointerId == -1 && pointerId != mapDragPointerId) {
+                    zoomPointerId = pointerId;
+                    lastZoomX = px;
+                    lastZoomY = py;
+                    float pDx = px - lastMapDragX;
+                    float pDy = py - lastMapDragY;
+                    lastPinchDist = (float) Math.sqrt(pDx * pDx + pDy * pDy);
+                }
+                break;
+            }
+
+            case MotionEvent.ACTION_MOVE: {
+                if (mapDragPointerId != -1 && zoomPointerId != -1) {
+                    int idx1 = event.findPointerIndex(mapDragPointerId);
+                    int idx2 = event.findPointerIndex(zoomPointerId);
+                    if (idx1 != -1 && idx2 != -1) {
+                        float x1 = event.getX(idx1), y1 = event.getY(idx1);
+                        float x2 = event.getX(idx2), y2 = event.getY(idx2);
+                        float pDx = x2 - x1, pDy = y2 - y1;
+                        float curDist = (float) Math.sqrt(pDx * pDx + pDy * pDy);
+                        if (lastPinchDist > 10f && curDist > 10f) {
+                            float factor = curDist / lastPinchDist;
+                            float focusX = (x1 + x2) * 0.5f;
+                            float focusY = (y1 + y2) * 0.5f;
+                            mapController.zoomBy(factor, focusX, focusY);
+                            mapHasDragged = true;
+                        }
+                        lastPinchDist = curDist;
+                    }
+                } else if (mapDragPointerId != -1) {
+                    int idx = event.findPointerIndex(mapDragPointerId);
+                    if (idx != -1) {
+                        float px = event.getX(idx);
+                        float py = event.getY(idx);
+                        float dx = px - lastMapDragX;
+                        float dy = py - lastMapDragY;
+                        if (Math.abs(dx) > 3f || Math.abs(dy) > 3f) {
+                            mapHasDragged = true;
+                            mapController.pan(dx, dy);
+                            lastMapDragX = px;
+                            lastMapDragY = py;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_POINTER_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                if (pointerId == mapDragPointerId) {
+                    if (!mapHasDragged && zoomPointerId == -1) {
+                        float px = event.getX(pointerIndex);
+                        float py = event.getY(pointerIndex);
+                        if (mapController.testButtonClick(px, py) == MapViewController.ButtonAction.NONE) {
+                            mapController.handleMapTap(px, py, pois, navigationTracker, playerX, playerZ);
+                        }
+                    }
+                    if (zoomPointerId != -1) {
+                        mapDragPointerId = zoomPointerId;
+                        int zIdx = event.findPointerIndex(zoomPointerId);
+                        if (zIdx != -1) {
+                            lastMapDragX = event.getX(zIdx);
+                            lastMapDragY = event.getY(zIdx);
+                        }
+                        zoomPointerId = -1;
+                    } else {
+                        mapDragPointerId = -1;
+                    }
+                    mapHasDragged = false;
+                } else if (pointerId == zoomPointerId) {
+                    zoomPointerId = -1;
+                }
+                break;
+            }
+        }
+    }
+
     public void resetFrameButtons() {
         jumpPressed = false;
         crouchToggled = false;
@@ -268,6 +426,8 @@ public class TouchInput {
         slidePressed = false;
         sprintToggled = false;
         camTogglePressed = false;
+        mapPressed = false;
+        mapClosed = false;
         interactPressed = false;
         pausePressed = false;
         deltaYaw = 0f;

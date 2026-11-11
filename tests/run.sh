@@ -20,12 +20,17 @@ javac -Xlint:-options -d "$OUT" \
     "$S/Item.java" \
     "$S/CameraRig.java" \
     "$S/TouchLayout.java" \
+    "$S/RoadNetwork.java" \
+    "$S/NavigationTracker.java" \
+    "$S/MapViewController.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
     "$ROOT/tests/AnimationTest.java" \
     "$ROOT/tests/CameraTest.java" \
-    "$ROOT/tests/TouchLayoutTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/TouchLayoutTest.java" \
+    "$ROOT/tests/RoadNetworkTest.java" \
+    "$ROOT/tests/MapTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -33,3 +38,5 @@ java -cp "$OUT" MovementTest
 java -cp "$OUT" AnimationTest
 java -cp "$OUT" CameraTest
 java -cp "$OUT" TouchLayoutTest
+java -cp "$OUT" RoadNetworkTest
+java -cp "$OUT" MapTest

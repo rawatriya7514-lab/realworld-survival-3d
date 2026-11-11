@@ -87,7 +87,7 @@ public class WorldRenderer {
     // ------------------------------------------------------------------
     // Geometry
     // ------------------------------------------------------------------
-    private FloatBuffer cubeVbo, quadVbo, fanVbo, triVbo, clipQuadVbo;
+    private FloatBuffer cubeVbo, quadVbo, quad2DVbo, fanVbo, triVbo, clipQuadVbo;
     private ShortBuffer cubeIbo, quadIbo;
     private static final int FLOATS_PER_VERT = 8; // pos3 normal3 uv2
 
@@ -370,6 +370,15 @@ public class WorldRenderer {
         quadVbo = floatBuffer(quad);
         quadIbo = shortBuffer(quadIdx);
 
+        // --- Dedicated 2D Unit Quad (0..1) for HUD panels and thick lines ---
+        float[] quad2D = {
+                0f, 0f,
+                1f, 0f,
+                1f, 1f,
+                0f, 1f
+        };
+        quad2DVbo = floatBuffer(quad2D);
+
         // --- Fullscreen clip-space quad for the sky (-1..1) ---
         float[] clipQuad = {-1, -1, 1, -1, 1, 1, -1, 1};
         clipQuadVbo = floatBuffer(clipQuad);
@@ -601,18 +610,29 @@ public class WorldRenderer {
     public void render(GL10 gl, Player player, WorldMap worldMap, List<HunterEnemy> chasers,
                        List<Item> items, TouchInput touch, GameView.GameState state,
                        float beaconPulse) {
-        renderCore(player, worldMap, chasers, items, touch, state, beaconPulse, null);
+        renderCore(player, worldMap, chasers, items, touch, state, beaconPulse, null,
+                null, null, null, false);
     }
 
     /** Open-world frame: terrain chunks + streamed obstacles, no parkour beacon. */
     public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
                                 TouchInput touch, GameView.GameState state) {
-        renderCore(player, null, null, null, touch, state, 0f, openWorld);
+        renderOpenWorld(gl, player, openWorld, touch, state, null, null, null, false);
+    }
+
+    public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
+                                TouchInput touch, GameView.GameState state,
+                                RoadNetwork roadNetwork, NavigationTracker navTracker,
+                                MapViewController mapController, boolean mapOverlayVisible) {
+        renderCore(player, null, null, null, touch, state, 0f, openWorld,
+                roadNetwork, navTracker, mapController, mapOverlayVisible);
     }
 
     private void renderCore(Player player, WorldMap worldMap, List<HunterEnemy> chasers,
                             List<Item> items, TouchInput touch, GameView.GameState state,
-                            float beaconPulse, OpenWorld openWorld) {
+                            float beaconPulse, OpenWorld openWorld,
+                            RoadNetwork roadNetwork, NavigationTracker navTracker,
+                            MapViewController mapController, boolean mapOverlayVisible) {
         if (!glReady) {
             init();
         }
@@ -675,6 +695,20 @@ public class WorldRenderer {
             drawCube(worldMap.extractionX, worldMap.extractionY + 15f, worldMap.extractionZ,
                     0, 0.9f, 30f, 0.9f, TEX_NEON,
                     1.0f, 0.85f, 0.15f, 1f, 1f, 1f, 0f, pulse);
+            GLES20.glDepthMask(true);
+            GLES20.glDisable(GLES20.GL_BLEND);
+        }
+
+        // Open-world navigation waypoint beacon (translucent cyan beam)
+        if (openWorld != null && navTracker != null && navTracker.hasActiveWaypoint) {
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+            GLES20.glDepthMask(false);
+            float groundY = Terrain.heightAt(navTracker.targetX, navTracker.targetZ);
+            float pulse = 0.55f + 0.35f * (float) Math.sin(System.currentTimeMillis() * 0.005);
+            drawCube(navTracker.targetX, groundY + 18f, navTracker.targetZ,
+                    0, 1.4f, 36f, 1.4f, TEX_NEON,
+                    0.15f, 0.85f, 1.0f, 1f, 1f, 1f, 0f, pulse);
             GLES20.glDepthMask(true);
             GLES20.glDisable(GLES20.GL_BLEND);
         }
@@ -745,7 +779,10 @@ public class WorldRenderer {
         // ---- HUD ----
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glDisable(GLES20.GL_CULL_FACE);
-        renderHUD(player, touch, state, worldMap);
+        GLES20.glEnable(GLES20.GL_BLEND);
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+        renderHUD(player, touch, state, worldMap, openWorld, roadNetwork, navTracker, mapController, mapOverlayVisible);
+        GLES20.glDisable(GLES20.GL_BLEND);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
         GLES20.glEnable(GLES20.GL_CULL_FACE);
     }
@@ -1132,13 +1169,20 @@ public class WorldRenderer {
     }
 
     // ==================================================================
-    // HUD
+    // HUD & Mini/World Map (Phase 6)
     // ==================================================================
     private void renderHUD(Player player, TouchInput touch, GameView.GameState state,
-                           WorldMap worldMap) {
+                           WorldMap worldMap, OpenWorld openWorld, RoadNetwork roadNetwork,
+                           NavigationTracker navTracker, MapViewController mapController,
+                           boolean mapOverlayVisible) {
         GLES20.glUseProgram(hudProgram);
         float[] mvp = new float[16];
         float[] tmp = new float[16];
+
+        if (mapOverlayVisible && mapController != null) {
+            renderFullscreenMap(player, touch, openWorld, roadNetwork, navTracker, mapController, mvp, tmp);
+            return;
+        }
 
         // Health / stamina / adrenaline bars
         drawBar(mvp, tmp, 25f, 25f, 240f, 18f, player.health / player.maxHealth,
@@ -1181,6 +1225,10 @@ public class WorldRenderer {
                 drawCircle(mvp, tmp, touch.btnCamX, touch.btnCamY, touch.btnCamRadius,
                         0.6f, 0.6f, 0.7f, op * 0.9f);
             }
+            if (touch.btnMapRadius > 0) {
+                drawCircle(mvp, tmp, touch.btnMapX, touch.btnMapY, touch.btnMapRadius,
+                        0.20f, 0.75f, 0.90f, op * 0.85f);
+            }
             if (touch.btnInteractRadius > 0 && touch.interactVisible) {
                 drawCircle(mvp, tmp, touch.btnInteractX, touch.btnInteractY,
                         touch.btnInteractRadius, 1.0f, 0.65f, 0.1f, Math.min(1.0f, op * 1.3f));
@@ -1191,15 +1239,235 @@ public class WorldRenderer {
             }
         }
 
-        // Extraction compass arrow around the joystick (screen-space direction)
+        // Rotating HUD Minimap (Phase 6)
+        if (openWorld != null && mapController != null) {
+            renderMinimap(player, openWorld, roadNetwork, navTracker, mapController, mvp, tmp);
+        }
+
+        // Compass arrow: Parkour extraction or Open World active waypoint
         if (worldMap != null) {
             float dx = worldMap.extractionX - player.x;
             float dz = worldMap.extractionZ - player.z;
-            float worldAng = (float) Math.atan2(dx, -dz);          // world heading
-            float screenAng = worldAng - (float) Math.toRadians(player.yaw);
+            float worldAng = (float) Math.toDegrees(Math.atan2(dx, -dz));
+            float screenAng = worldAng - player.yaw;
             drawArrow(mvp, tmp, screenWidth * 0.5f, screenHeight * 0.16f,
                     26f, screenAng, 1.0f, 0.85f, 0.1f, 0.85f);
+        } else if (openWorld != null && navTracker != null && navTracker.hasActiveWaypoint) {
+            float[] nextWp = new float[2];
+            navTracker.getNextWaypoint(nextWp);
+            float dx = nextWp[0] - player.x;
+            float dz = nextWp[1] - player.z;
+            float worldAng = (float) Math.toDegrees(Math.atan2(dx, -dz));
+            float screenAng = worldAng - player.yaw;
+            drawArrow(mvp, tmp, screenWidth * 0.5f, screenHeight * 0.16f,
+                    26f, screenAng, 0.15f, 0.90f, 1.0f, 0.90f);
         }
+    }
+
+    private void renderMinimap(Player player, OpenWorld openWorld, RoadNetwork roadNetwork,
+                               NavigationTracker navTracker, MapViewController mapController,
+                               float[] mvp, float[] tmp) {
+        float cx = mapController.minimapCenterX;
+        float cy = mapController.minimapCenterY;
+        float r = mapController.minimapRadius;
+
+        // Minimap background disc
+        drawCircle(mvp, tmp, cx, cy, r, 0.08f, 0.12f, 0.16f, 0.84f);
+        // Outer cyan border ring
+        drawCircle(mvp, tmp, cx, cy, r + 2.0f, 0.25f, 0.70f, 0.90f, 0.50f);
+        drawCircle(mvp, tmp, cx, cy, r - 1.0f, 0.08f, 0.12f, 0.16f, 0.90f);
+
+        // River corridor line if within range
+        if (Math.abs(player.z - 240f) < 140f) {
+            float[] r1 = new float[3];
+            float[] r2 = new float[3];
+            mapController.worldToMinimapLocal(-240f, 240f, player.x, player.z, player.yaw, r1);
+            mapController.worldToMinimapLocal(240f, 240f, player.x, player.z, player.yaw, r2);
+            draw2DLine(mvp, tmp, cx + r1[0], cy + r1[1], cx + r2[0], cy + r2[1],
+                    10f, 0.12f, 0.38f, 0.60f, 0.65f);
+        }
+
+        // Local road network segments
+        if (roadNetwork != null) {
+            float[] p1 = new float[3];
+            float[] p2 = new float[3];
+            List<RoadNetwork.Node> nodes = roadNetwork.getNodes();
+            for (int i = 0; i < nodes.size(); i++) {
+                RoadNetwork.Node n = nodes.get(i);
+                for (int j = 0; j < n.edges.size(); j++) {
+                    RoadNetwork.Edge e = n.edges.get(j);
+                    if (e.target.id > n.id) {
+                        boolean in1 = mapController.worldToMinimapLocal(n.x, n.z, player.x, player.z, player.yaw, p1);
+                        boolean in2 = mapController.worldToMinimapLocal(e.target.x, e.target.z, player.x, player.z, player.yaw, p2);
+                        if (in1 || in2 || (p1[2] < r * 1.3f && p2[2] < r * 1.3f)) {
+                            draw2DLine(mvp, tmp, cx + p1[0], cy + p1[1], cx + p2[0], cy + p2[1],
+                                    2.4f, 0.45f, 0.50f, 0.55f, 0.65f);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Active navigation route on minimap
+        if (navTracker != null && navTracker.hasActiveWaypoint && navTracker.currentRoute != null) {
+            List<RoadNetwork.Node> rNodes = navTracker.currentRoute.nodes;
+            float[] wp1 = new float[3];
+            float[] wp2 = new float[3];
+
+            // Player to next waypoint
+            float[] nxt = new float[2];
+            navTracker.getNextWaypoint(nxt);
+            mapController.worldToMinimapLocal(nxt[0], nxt[1], player.x, player.z, player.yaw, wp2);
+            draw2DLine(mvp, tmp, cx, cy, cx + wp2[0], cy + wp2[1], 3.6f, 0.15f, 0.90f, 1.0f, 0.95f);
+
+            for (int i = navTracker.currentWaypointIndex; i < rNodes.size() - 1; i++) {
+                RoadNetwork.Node na = rNodes.get(i);
+                RoadNetwork.Node nb = rNodes.get(i + 1);
+                mapController.worldToMinimapLocal(na.x, na.z, player.x, player.z, player.yaw, wp1);
+                mapController.worldToMinimapLocal(nb.x, nb.z, player.x, player.z, player.yaw, wp2);
+                draw2DLine(mvp, tmp, cx + wp1[0], cy + wp1[1], cx + wp2[0], cy + wp2[1],
+                        3.6f, 0.15f, 0.90f, 1.0f, 0.95f);
+            }
+
+            // Target marker
+            float[] targetPt = new float[3];
+            if (mapController.worldToMinimapLocal(navTracker.targetX, navTracker.targetZ, player.x, player.z, player.yaw, targetPt)) {
+                drawCircle(mvp, tmp, cx + targetPt[0], cy + targetPt[1], 5.0f, 1.0f, 0.85f, 0.15f, 0.95f);
+            }
+        }
+
+        // POIs within range
+        if (openWorld != null && openWorld.pois != null) {
+            float[] poiPt = new float[3];
+            for (OpenWorld.Poi p : openWorld.pois) {
+                if (mapController.worldToMinimapLocal(p.x, p.z, player.x, player.z, player.yaw, poiPt)) {
+                    float pr = 0.95f, pg = 0.85f, pb = 0.20f;
+                    if (p.type == OpenWorld.TYPE_SHELTER) { pr = 0.20f; pg = 0.90f; pb = 0.35f; }
+                    else if (p.type == OpenWorld.TYPE_SHOP) { pr = 1.0f; pg = 0.60f; pb = 0.15f; }
+                    drawCircle(mvp, tmp, cx + poiPt[0], cy + poiPt[1], 4.2f, pr, pg, pb, 0.95f);
+                }
+            }
+        }
+
+        // North Cardinal indicator on rim
+        float[] north = new float[2];
+        mapController.getMinimapNorthPosition(player.yaw, north);
+        drawCircle(mvp, tmp, north[0], north[1], 4.5f, 0.95f, 0.25f, 0.20f, 0.95f);
+
+        // Player heading needle at center
+        drawArrow(mvp, tmp, cx, cy, 18f, 0f, 1.0f, 1.0f, 1.0f, 0.95f);
+    }
+
+    private void renderFullscreenMap(Player player, TouchInput touch, OpenWorld openWorld,
+                                     RoadNetwork roadNetwork, NavigationTracker navTracker,
+                                     MapViewController mapController, float[] mvp, float[] tmp) {
+        // Dimming backdrop
+        draw2DQuad(mvp, tmp, 0f, 0f, screenWidth, screenHeight, 0.05f, 0.08f, 0.12f, 0.94f);
+
+        // River corridor
+        float rvy = mapController.worldToScreenY(210f);
+        float rvh = (260f - 210f) * mapController.zoom;
+        float rvx = mapController.worldToScreenX(MapViewController.MIN_WORLD_X);
+        float rvw = MapViewController.WORLD_SIZE * mapController.zoom;
+        draw2DQuad(mvp, tmp, rvx, rvy, rvw, rvh, 0.10f, 0.35f, 0.55f, 0.65f);
+
+        // City Core region
+        float ccx = mapController.worldToScreenX(32f);
+        float ccy = mapController.worldToScreenY(-120f);
+        float ccw = (280f - 32f) * mapController.zoom;
+        float cch = (120f - (-120f)) * mapController.zoom;
+        draw2DQuad(mvp, tmp, ccx, ccy, ccw, cch, 0.18f, 0.22f, 0.28f, 0.50f);
+
+        // Central Plaza safe zone circle
+        float plx = mapController.worldToScreenX(OpenWorld.PLAZA_X);
+        float ply = mapController.worldToScreenY(OpenWorld.PLAZA_Z);
+        drawCircle(mvp, tmp, plx, ply, OpenWorld.PLAZA_RADIUS * mapController.zoom, 0.15f, 0.55f, 0.25f, 0.35f);
+
+        // River Bridge
+        float brX = mapController.worldToScreenX(-40f);
+        float brY = mapController.worldToScreenY(210f);
+        float brW = 30f * mapController.zoom;
+        float brH = 50f * mapController.zoom;
+        draw2DQuad(mvp, tmp, brX, brY, brW, brH, 0.35f, 0.40f, 0.45f, 0.75f);
+
+        // Entire Road Network
+        if (roadNetwork != null) {
+            List<RoadNetwork.Node> allNodes = roadNetwork.getNodes();
+            for (int i = 0; i < allNodes.size(); i++) {
+                RoadNetwork.Node n = allNodes.get(i);
+                float nx = mapController.worldToScreenX(n.x);
+                float ny = mapController.worldToScreenY(n.z);
+                drawCircle(mvp, tmp, nx, ny, 3.2f, 0.40f, 0.45f, 0.50f, 0.85f);
+                for (int j = 0; j < n.edges.size(); j++) {
+                    RoadNetwork.Edge e = n.edges.get(j);
+                    if (e.target.id > n.id) {
+                        float ex = mapController.worldToScreenX(e.target.x);
+                        float ey = mapController.worldToScreenY(e.target.z);
+                        draw2DLine(mvp, tmp, nx, ny, ex, ey, 2.5f, 0.45f, 0.50f, 0.55f, 0.80f);
+                    }
+                }
+            }
+        }
+
+        // Active Navigation Route
+        if (navTracker != null && navTracker.hasActiveWaypoint && navTracker.currentRoute != null) {
+            float psx = mapController.worldToScreenX(player.x);
+            float psy = mapController.worldToScreenY(player.z);
+            List<RoadNetwork.Node> rNodes = navTracker.currentRoute.nodes;
+            float prevX = psx, prevY = psy;
+            for (int i = navTracker.currentWaypointIndex; i < rNodes.size(); i++) {
+                RoadNetwork.Node rn = rNodes.get(i);
+                float nsx = mapController.worldToScreenX(rn.x);
+                float nsy = mapController.worldToScreenY(rn.z);
+                draw2DLine(mvp, tmp, prevX, prevY, nsx, nsy, 4.5f, 0.15f, 0.90f, 1.0f, 0.95f);
+                drawCircle(mvp, tmp, nsx, nsy, 4.0f, 0.20f, 0.95f, 1.0f, 0.95f);
+                prevX = nsx; prevY = nsy;
+            }
+            float tsx = mapController.worldToScreenX(navTracker.targetX);
+            float tsy = mapController.worldToScreenY(navTracker.targetZ);
+            draw2DLine(mvp, tmp, prevX, prevY, tsx, tsy, 4.5f, 0.15f, 0.90f, 1.0f, 0.95f);
+            drawCircle(mvp, tmp, tsx, tsy, 8.5f, 1.0f, 0.85f, 0.15f, 0.95f);
+            drawCircle(mvp, tmp, tsx, tsy, 4.5f, 0.15f, 0.90f, 1.0f, 0.95f);
+        }
+
+        // POI Markers
+        if (openWorld != null && openWorld.pois != null) {
+            for (OpenWorld.Poi p : openWorld.pois) {
+                float sx = mapController.worldToScreenX(p.x);
+                float sy = mapController.worldToScreenY(p.z);
+                if (sx >= -25 && sx <= screenWidth + 25 && sy >= -25 && sy <= screenHeight + 25) {
+                    float r = 0.95f, g = 0.85f, b = 0.20f;
+                    if (p.type == OpenWorld.TYPE_SHELTER) { r = 0.20f; g = 0.90f; b = 0.35f; }
+                    else if (p.type == OpenWorld.TYPE_SHOP) { r = 1.0f; g = 0.65f; b = 0.15f; }
+                    drawCircle(mvp, tmp, sx, sy, 7.5f, r, g, b, 0.95f);
+                    drawCircle(mvp, tmp, sx, sy, 3.5f, 0.08f, 0.12f, 0.16f, 0.95f);
+                }
+            }
+        }
+
+        // Player marker
+        float px = mapController.worldToScreenX(player.x);
+        float py = mapController.worldToScreenY(player.z);
+        drawCircle(mvp, tmp, px, py, 7.5f, 1.0f, 1.0f, 1.0f, 0.95f);
+        drawArrow(mvp, tmp, px, py, 16f, -player.yaw, 0.20f, 0.85f, 1.0f, 0.95f);
+
+        // Header and Footer bars
+        draw2DQuad(mvp, tmp, 0f, 0f, screenWidth, 42f, 0.08f, 0.12f, 0.16f, 0.88f);
+        draw2DQuad(mvp, tmp, 0f, screenHeight - 34f, screenWidth, 34f, 0.08f, 0.12f, 0.16f, 0.88f);
+
+        // Control buttons
+        drawCircle(mvp, tmp, mapController.btnCloseX, mapController.btnCloseY,
+                mapController.btnCloseRadius, 0.85f, 0.25f, 0.20f, 0.90f);
+        drawCircle(mvp, tmp, mapController.btnCenterX, mapController.btnCenterY,
+                mapController.btnCenterRadius, 0.20f, 0.70f, 0.90f, 0.90f);
+        drawCircle(mvp, tmp, mapController.btnCenterX, mapController.btnCenterY,
+                mapController.btnCenterRadius * 0.45f, 1.0f, 1.0f, 1.0f, 0.95f);
+        drawCircle(mvp, tmp, mapController.btnClearX, mapController.btnClearY,
+                mapController.btnClearRadius, 0.75f, 0.65f, 0.25f, 0.90f);
+        drawCircle(mvp, tmp, mapController.btnZoomInX, mapController.btnZoomInY,
+                mapController.btnZoomInRadius, 0.25f, 0.75f, 0.85f, 0.90f);
+        drawCircle(mvp, tmp, mapController.btnZoomOutX, mapController.btnZoomOutY,
+                mapController.btnZoomOutRadius, 0.25f, 0.75f, 0.85f, 0.90f);
     }
 
     private void drawBar(float[] mvp, float[] tmp, float x, float y, float w, float h,
@@ -1212,6 +1480,27 @@ public class WorldRenderer {
         }
     }
 
+    private void draw2DLine(float[] mvp, float[] tmp, float x1, float y1, float x2, float y2,
+                            float thickness, float r, float g, float b, float a) {
+        if (a <= 0f) return;
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.5f) return;
+        float angleDeg = (float) Math.toDegrees(Math.atan2(dy, dx));
+        float[] model = Mat4.translate(x1, y1, 0);
+        Mat4.mul(model, Mat4.rotZ(angleDeg));
+        Mat4.mul(model, Mat4.translate(0, -thickness * 0.5f, 0));
+        Mat4.mul(model, Mat4.scale(len, thickness, 1));
+        Matrix.multiplyMM(mvp, 0, orthoMatrix, 0, model, 0);
+        GLES20.glUniformMatrix4fv(hLocMVP, 1, false, mvp, 0);
+        GLES20.glUniform4f(hLocColor, r, g, b, a);
+        GLES20.glEnableVertexAttribArray(hLocPos);
+        GLES20.glVertexAttribPointer(hLocPos, 2, GLES20.GL_FLOAT, false, 0, quad2DVbo);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, 4);
+        GLES20.glDisableVertexAttribArray(hLocPos);
+    }
+
     private void draw2DQuad(float[] mvp, float[] tmp, float x, float y, float w, float h,
                             float r, float g, float b, float a) {
         if (a <= 0f) return;
@@ -1221,7 +1510,7 @@ public class WorldRenderer {
         GLES20.glUniformMatrix4fv(hLocMVP, 1, false, mvp, 0);
         GLES20.glUniform4f(hLocColor, r, g, b, a);
         GLES20.glEnableVertexAttribArray(hLocPos);
-        GLES20.glVertexAttribPointer(hLocPos, 2, GLES20.GL_FLOAT, false, 0, quadVbo);
+        GLES20.glVertexAttribPointer(hLocPos, 2, GLES20.GL_FLOAT, false, 0, quad2DVbo);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, 4);
         GLES20.glDisableVertexAttribArray(hLocPos);
     }

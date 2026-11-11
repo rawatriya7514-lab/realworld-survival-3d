@@ -21,7 +21,8 @@ public class TouchLayout {
         SPRINT,
         CAM,
         INTERACT,
-        PAUSE
+        PAUSE,
+        MAP
     }
 
     public float screenWidth = 800f;
@@ -45,6 +46,7 @@ public class TouchLayout {
     public float btnCamX, btnCamY, btnCamRadius;
     public float btnInteractX, btnInteractY, btnInteractRadius;
     public float btnPauseX, btnPauseY, btnPauseRadius;
+    public float btnMapX, btnMapY, btnMapRadius;
 
     public TouchLayout() {
         update(800f, 600f, 1.0f, 0.65f, false);
@@ -82,6 +84,7 @@ public class TouchLayout {
         btnCrouchRadius = baseRadius * 0.75f;
         btnCamRadius = baseRadius * 0.65f;
         btnPauseRadius = baseRadius * 0.55f;
+        btnMapRadius = baseRadius * 0.55f;
         btnInteractRadius = baseRadius * 0.90f;
 
         if (leftHanded) {
@@ -102,12 +105,15 @@ public class TouchLayout {
             btnCrouchX = btnSprintX + btnJumpRadius * 1.85f;
             btnCrouchY = btnSprintY;
 
-            // Top-left camera toggle and pause
+            // Top-left camera toggle, pause and map
             btnCamX = btnCamRadius * 1.8f;
             btnCamY = btnCamRadius * 1.8f;
 
             btnPauseX = btnCamX + btnCamRadius * 2.4f;
             btnPauseY = btnCamY;
+
+            btnMapX = btnPauseX + btnPauseRadius * 2.4f;
+            btnMapY = btnCamY;
 
             // Interact floats mid-left above the cluster
             btnInteractX = btnInteractRadius * 2.0f;
@@ -130,12 +136,15 @@ public class TouchLayout {
             btnCrouchX = btnSprintX - btnJumpRadius * 1.85f;
             btnCrouchY = btnSprintY;
 
-            // Top-right camera toggle and pause
+            // Top-right camera toggle, pause and map
             btnCamX = this.screenWidth - btnCamRadius * 1.8f;
             btnCamY = btnCamRadius * 1.8f;
 
             btnPauseX = btnCamX - btnCamRadius * 2.4f;
             btnPauseY = btnCamY;
+
+            btnMapX = btnPauseX - btnPauseRadius * 2.4f;
+            btnMapY = btnCamY;
 
             // Interact floats mid-right above the cluster
             btnInteractX = this.screenWidth - btnInteractRadius * 2.0f;
@@ -155,6 +164,7 @@ public class TouchLayout {
         if (isInside(px, py, btnCamX, btnCamY, btnCamRadius)) return ButtonType.CAM;
         if (interactVisible && isInside(px, py, btnInteractX, btnInteractY, btnInteractRadius)) return ButtonType.INTERACT;
         if (isInside(px, py, btnPauseX, btnPauseY, btnPauseRadius)) return ButtonType.PAUSE;
+        if (isInside(px, py, btnMapX, btnMapY, btnMapRadius)) return ButtonType.MAP;
         return ButtonType.NONE;
     }
 

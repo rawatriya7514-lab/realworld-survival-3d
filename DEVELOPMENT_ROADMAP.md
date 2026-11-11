@@ -249,9 +249,49 @@ Test results (real, this session):
 Known phase-5 limitations (tracked, see KNOWN_ISSUES.md):
 - HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 6 — World map — PLANNED
-- Fullscreen map (pinch/pan/markers/waypoints) + rotating minimap + road
-  routing. Gate: JVM routing checks.
+### PHASE 6 — World map (2026-11-11) — DONE
+Scope: road network graph with Dijkstra shortest-path pathfinding, step-by-step
+waypoint progression with dynamic rerouting (>12m off-route), rotating HUD minimap
+with cardinal compass indicators, and fullscreen interactive map with pan, pinch-zoom,
+and tap-to-set waypoint navigation.
+
+What was built (all original code):
+- `RoadNetwork.java` (new, pure Java): spatial road graph across 33 nodes covering
+  Manhattan 4x4 city grid, Central Plaza safehouse, Workshop, River Bridge,
+  Old Docks, Watchtower, and Ranger Hut; Dijkstra shortest-path pathfinding;
+  nearest-node queries; blocked edge states with graceful unreachable handling.
+- `NavigationTracker.java` (new, pure Java): step-by-step waypoint node progression
+  advancing when within 8.0m of current node; arrival detection within 5.0m;
+  dynamic auto-rerouting when player strays > 12.0m off the active route corridor;
+  distance and bearing math.
+- `MapViewController.java` (new, pure Java): 896m x 896m world viewport controller;
+  bijective world <-> screen coordinate projections; anchor-focus stable pan & zoom;
+  rotating HUD minimap projection keeping player heading straight UP; cardinal
+  direction ring (N, E, S, W); POI snapping and tap-to-waypoint handling; control
+  button hit-testing (Close, Center, Clear, Zoom +/-).
+- `WorldRenderer.java` updates: dedicated tightly-packed 2D quad buffer (`quad2DVbo`);
+  dynamic thick line renderer (`draw2DLine`); 3D world navigation beacon pillar
+  pulsing cyan at destination; rotating HUD minimap with river curve, local road
+  segments, POI icons, and active route; fullscreen interactive map overlay with
+  regional color shading, road network, POI badges, and player orientation.
+- `TouchInput.java` & `GameView.java` integration: seamless tap-to-open map via minimap
+  or dedicated HUD map button (`btnMap`); map drag/pan, pinch-to-zoom, and tap-to-route;
+  back button closes map overlay; real-time navigation distance in HUD.
+- Tests: `tests/RoadNetworkTest.java` (6 groups, 30 checks) and `tests/MapTest.java`
+  (6 groups, 58 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**. Total: **2,756 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 26 classes).
+- APK: built, 22,040,462 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2756/0.
+
+Known phase-6 limitations (tracked, see KNOWN_ISSUES.md):
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
 ### PHASE 7 — Environment — PLANNED
 - Building interiors, day/night cycle, weather-lite, graphics presets.

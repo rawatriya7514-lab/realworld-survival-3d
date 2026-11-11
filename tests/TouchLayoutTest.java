@@ -104,8 +104,9 @@ public class TouchLayoutTest {
                 {layout.btnSlideX, layout.btnSlideY, layout.btnSlideRadius},
                 {layout.btnSprintX, layout.btnSprintY, layout.btnSprintRadius},
                 {layout.btnCamX, layout.btnCamY, layout.btnCamRadius},
-                {layout.btnInteractX, layout.btnInteractY, layout.btnInteractRadius},
-                {layout.btnPauseX, layout.btnPauseY, layout.btnPauseRadius}
+                {layout.btnPauseX, layout.btnPauseY, layout.btnPauseRadius},
+                {layout.btnMapX, layout.btnMapY, layout.btnMapRadius},
+                {layout.btnInteractX, layout.btnInteractY, layout.btnInteractRadius}
         };
 
         boolean allDisjoint = true;
@@ -179,8 +180,9 @@ public class TouchLayoutTest {
                     {layout.btnSlideX, layout.btnSlideY, layout.btnSlideRadius},
                     {layout.btnSprintX, layout.btnSprintY, layout.btnSprintRadius},
                     {layout.btnCamX, layout.btnCamY, layout.btnCamRadius},
-                    {layout.btnInteractX, layout.btnInteractY, layout.btnInteractRadius},
-                    {layout.btnPauseX, layout.btnPauseY, layout.btnPauseRadius}
+                    {layout.btnPauseX, layout.btnPauseY, layout.btnPauseRadius},
+                    {layout.btnMapX, layout.btnMapY, layout.btnMapRadius},
+                    {layout.btnInteractX, layout.btnInteractY, layout.btnInteractRadius}
             };
 
             for (float[] b : btns) {
@@ -205,6 +207,7 @@ public class TouchLayoutTest {
         check(layout.testButton(layout.btnSprintX, layout.btnSprintY, false) == ButtonType.SPRINT, "hit test SPRINT");
         check(layout.testButton(layout.btnCamX, layout.btnCamY, false) == ButtonType.CAM, "hit test CAM");
         check(layout.testButton(layout.btnPauseX, layout.btnPauseY, false) == ButtonType.PAUSE, "hit test PAUSE");
+        check(layout.testButton(layout.btnMapX, layout.btnMapY, false) == ButtonType.MAP, "hit test MAP");
 
         // Contextual interact
         check(layout.testButton(layout.btnInteractX, layout.btnInteractY, true) == ButtonType.INTERACT, "hit test INTERACT when visible");

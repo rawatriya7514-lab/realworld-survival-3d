@@ -53,6 +53,12 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     private Vibrator vibrator;
     private Context context;
 
+    // Phase 6: World Map, Road Network & Navigation
+    public final RoadNetwork roadNetwork = new RoadNetwork();
+    public final NavigationTracker navigationTracker = new NavigationTracker(roadNetwork);
+    public final MapViewController mapController = new MapViewController();
+    public boolean mapOverlayVisible = false;
+
     // Timing
     private long lastFrameTime;
     private float deltaTime;
@@ -284,16 +290,50 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         missionTitle = "Free Roam: The Long Signal";
         missionGoal = "Explore the city and countryside. Landmarks get discovered.";
 
+        mapOverlayVisible = false;
+        navigationTracker.clearDestination();
+        mapController.centerOnPlayer(player.x, player.z);
+
         currentState = GameState.PLAYING;
         openWorld.recomputeActive(player.x, player.z);
         audioManager.playMusic(MUSIC_MENU);
     }
 
     private void updateOpenWorld(float dt) {
+        // Sync map and routing state with touch input
+        touchInput.mapOverlayVisible = mapOverlayVisible;
+        touchInput.mapController = mapController;
+        touchInput.roadNetwork = roadNetwork;
+        touchInput.navigationTracker = navigationTracker;
+        touchInput.pois = openWorld.pois;
+        touchInput.playerX = player.x;
+        touchInput.playerZ = player.z;
+
+        if (touchInput.mapPressed) {
+            mapOverlayVisible = !mapOverlayVisible;
+            if (mapOverlayVisible) {
+                mapController.centerOnPlayer(player.x, player.z);
+            }
+            touchInput.mapPressed = false;
+        }
+        if (touchInput.mapClosed) {
+            mapOverlayVisible = false;
+            touchInput.mapClosed = false;
+        }
+
         openWorld.recomputeActive(player.x, player.z);
         player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
                 touchInput.slidePressed, touchInput.sprintToggled, touchInput.crouchToggled,
                 openWorld.activeObstacles());
+
+        // Update navigation tracker progression and auto-rerouting
+        navigationTracker.update(player.x, player.z);
+        if (navigationTracker.arrived) {
+            toastMessage = "Arrived at " + navigationTracker.destinationName;
+            toastTimer = 3.0f;
+            navigationTracker.arrived = false;
+            vibrate(40);
+        }
 
         // Invisible border: keep the player inside the 896 m world
         if (player.x > 442f) { player.x = 442f; player.vx = 0f; }
@@ -320,7 +360,12 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
 
         if (ui != null) {
-            ui.setHudMission(missionTitle, missionGoal);
+            String goal = missionGoal;
+            if (navigationTracker.hasActiveWaypoint) {
+                float rem = navigationTracker.getRemainingDistance(player.x, player.z);
+                goal = "Nav: " + navigationTracker.destinationName + " (" + (int) rem + "m)";
+            }
+            ui.setHudMission(missionTitle, goal);
             ui.setHudStats("Region: " + OpenWorld.regionAt(player.x, player.z).display
                     + "   Score " + player.score);
             String prompt = toastTimer > 0f ? toastMessage : null;
@@ -392,6 +437,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
         applyTouchSettings();
         touchInput.updateScreenSize(width, height);
+        mapController.setScreenSize(width, height);
+        mapController.setLeftHanded(settings.leftHanded);
     }
 
     private void applyTouchSettings() {
@@ -403,6 +450,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         touchInput.leftHanded = settings.leftHanded;
         touchInput.joystickSensitivity = settings.joystickSensitivity;
         touchInput.updateScreenSize(touchInput.screenWidth, touchInput.screenHeight);
+        mapController.setLeftHanded(settings.leftHanded);
     }
 
     @Override
@@ -431,7 +479,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
         if (worldRenderer != null && touchInput != null) {
             if (activeMode == GameMode.OPEN_WORLD) {
-                worldRenderer.renderOpenWorld(gl, player, openWorld, touchInput, currentState);
+                worldRenderer.renderOpenWorld(gl, player, openWorld, touchInput, currentState,
+                        roadNetwork, navigationTracker, mapController, mapOverlayVisible);
             } else {
                 worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
                         currentState, beaconPulse);
@@ -828,6 +877,10 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
      * Returns true when handled.
      */
     public boolean onBackPressed() {
+        if (mapOverlayVisible) {
+            mapOverlayVisible = false;
+            return true;
+        }
         switch (currentState) {
             case PLAYING:
                 pauseGame();
