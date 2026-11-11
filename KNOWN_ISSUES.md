@@ -40,11 +40,8 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 3)
-1. **Camera height does not yet lower when crouching** — player collision
-   bounding box and visual model crouch properly (height drops to 0.8 m), but
-   camera height follows standing head offset until Camera Phase 4.
-2. **HunterEnemy uses single-box model** — HunterEnemy is rendered with single-cube
+## Open issues (Phase 4)
+1. **HunterEnemy uses single-box model** — HunterEnemy is rendered with single-cube
    body + glowing visor; full enemy animation rig planned for Phase 8 AI.
 
 ## Resolved during development
@@ -62,3 +59,9 @@ Maintained per phase; nothing is hidden.
   JOG 12.0, RUN 15.0, SPRINT 19.0 rad/s), 0.18s cross-fade pose blending,
   breathing idle cycle, full 360-deg safety roll rotation, and renderer
   articulated limb transformation matrix hierarchy. Details: TEST_REPORT.md §Phase 3.
+- PHASE 4: camera crouch eye-level dynamic adaptation (standing 1.45m to crouch 0.65m),
+  building/obstacle raycast obstruction pull-in with 0.25m collision margin (camera
+  cannot clip inside geometry), open-world terrain height and river surface minimum
+  clearance clamp, pitch limits [-80, +80 deg], Dutch-angle roll on wall-runs,
+  continuous pinch-zoom (0.8x-1.6x) and presets (CLOSE/NORMAL/FAR), pure Java 4x4
+  view matrix math. Details: TEST_REPORT.md §Phase 4.

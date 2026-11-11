@@ -32,6 +32,13 @@ public class TouchInput {
     public float deltaPitch = 0f;
     public float sensitivity = 0.22f;
 
+    // Pinch Zoom
+    public int zoomPointerId = -1;
+    public float lastZoomX = 0f;
+    public float lastZoomY = 0f;
+    public float lastPinchDist = 0f;
+    public float deltaZoom = 0f;
+
     // Action Buttons
     public boolean jumpPressed = false;
     public boolean vaultPressed = false;
@@ -150,11 +157,20 @@ public class TouchInput {
                     isJoystickActive = true;
                     updateJoystickValues();
                 }
-                // Right side = Camera look
-                else if (px >= screenWidth * 0.45f && cameraPointerId == -1) {
-                    cameraPointerId = pointerId;
-                    lastCameraX = px;
-                    lastCameraY = py;
+                // Right side = Camera look & pinch zoom
+                else if (px >= screenWidth * 0.45f) {
+                    if (cameraPointerId == -1) {
+                        cameraPointerId = pointerId;
+                        lastCameraX = px;
+                        lastCameraY = py;
+                    } else if (zoomPointerId == -1 && pointerId != cameraPointerId) {
+                        zoomPointerId = pointerId;
+                        lastZoomX = px;
+                        lastZoomY = py;
+                        float pDx = px - lastCameraX;
+                        float pDy = py - lastCameraY;
+                        lastPinchDist = (float) Math.sqrt(pDx * pDx + pDy * pDy);
+                    }
                 }
                 break;
             }
@@ -170,14 +186,30 @@ public class TouchInput {
                         joystickCurrentY = py;
                         updateJoystickValues();
                     } else if (pId == cameraPointerId) {
-                        float yawStep = (px - lastCameraX) * sensitivity * sensitivityScale;
-                        float pitchStep = (py - lastCameraY) * sensitivity * sensitivityScale;
-                        if (invertLookY) pitchStep = -pitchStep;
-                        deltaYaw += yawStep;
-                        deltaPitch += pitchStep;
+                        if (zoomPointerId == -1) {
+                            float yawStep = (px - lastCameraX) * sensitivity * sensitivityScale;
+                            float pitchStep = (py - lastCameraY) * sensitivity * sensitivityScale;
+                            if (invertLookY) pitchStep = -pitchStep;
+                            deltaYaw += yawStep;
+                            deltaPitch += pitchStep;
+                        }
                         lastCameraX = px;
                         lastCameraY = py;
+                    } else if (pId == zoomPointerId) {
+                        lastZoomX = px;
+                        lastZoomY = py;
                     }
+                }
+
+                if (cameraPointerId != -1 && zoomPointerId != -1) {
+                    float pDx = lastZoomX - lastCameraX;
+                    float pDy = lastZoomY - lastCameraY;
+                    float curPinchDist = (float) Math.sqrt(pDx * pDx + pDy * pDy);
+                    if (lastPinchDist > 10f) {
+                        float pinchDelta = (curPinchDist - lastPinchDist) / Math.max(1f, screenWidth);
+                        deltaZoom += pinchDelta * 1.5f;
+                    }
+                    lastPinchDist = curPinchDist;
                 }
                 break;
             }
@@ -190,8 +222,17 @@ public class TouchInput {
                     isJoystickActive = false;
                     moveX = 0f;
                     moveY = 0f;
+                } else if (pointerId == zoomPointerId) {
+                    zoomPointerId = -1;
                 } else if (pointerId == cameraPointerId) {
-                    cameraPointerId = -1;
+                    if (zoomPointerId != -1) {
+                        cameraPointerId = zoomPointerId;
+                        lastCameraX = lastZoomX;
+                        lastCameraY = lastZoomY;
+                        zoomPointerId = -1;
+                    } else {
+                        cameraPointerId = -1;
+                    }
                 }
                 break;
             }
@@ -237,5 +278,6 @@ public class TouchInput {
         pausePressed = false;
         deltaYaw = 0f;
         deltaPitch = 0f;
+        deltaZoom = 0f;
     }
 }

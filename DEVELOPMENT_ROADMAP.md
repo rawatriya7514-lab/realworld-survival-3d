@@ -11,7 +11,7 @@ possible (no adb available in this environment; see KNOWN_ISSUES.md).
 | 1 | Game foundation: mode select, open-world scene loads playable | **DONE** | `PHASE-1` commit |
 | 2 | Movement: terrain locomotion, all states, collision | **DONE** | `PHASE-2` commit |
 | 3 | Animations: procedural state machine + blending | **DONE** | `PHASE-3` commit |
-| 4 | Camera: follow, orbit, zoom, collision, terrain-aware | PLANNED | — |
+| 4 | Camera: follow, orbit, zoom, collision, terrain-aware | **DONE** | `PHASE-4` commit |
 | 5 | Touch controls: joystick/buttons + layout settings | PLANNED | — |
 | 6 | World map: fullscreen map, minimap, waypoints, navigation | PLANNED | — |
 | 7 | Environment: terrain/roads/buildings-interiors/water/trees/day-night | PLANNED | — |
@@ -175,12 +175,42 @@ Test results (real, this session):
 - Device runtime: **NOT TESTED** (no adb). JVM gate: 2589/0.
 
 Known phase-3 limitations (tracked, see KNOWN_ISSUES.md):
-- Camera height follows standing eye-level during crouch (offset lowers in Phase 4).
 - HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 4 — Camera — PLANNED
-- Orbit/zoom/collision pull-in + terrain-aware min height settings.
-- Gate: JVM camera-math checks.
+### PHASE 4 — Camera (2026-11-11) — DONE
+Scope: third-person and first-person camera controller (`CameraRig.java`),
+dynamic crouch eye-level adaptation, orbit yaw/pitch clamping, Dutch-angle roll,
+continuous pinch-zoom and presets, slab-based AABB obstruction raycast pull-in,
+and terrain-aware minimum height clearance.
+
+What was built (all original code):
+- `CameraRig.java` (new, pure Java): target tracking with smooth exponential
+  damping; dynamic focus height transitioning between standing (1.45m) and
+  crouching (0.65m), smoothly eliminating low-headroom clipping; 360-degree yaw
+  orbit with strict pitch clamp [-80, +80 deg]; Dutch angle roll (-15 to +15 deg)
+  with exponential return; continuous zoom multiplier (0.8x - 1.6x) and presets
+  (CLOSE 2.5m, NORMAL 4.8m, FAR 7.2m); slab-based AABB ray-box intersection
+  with 0.25m safety margin against all solid obstacles (instant pull-in to avoid
+  geometry clipping, smooth return outward); open-world terrain clearance clamp
+  (never dips below `Terrain.heightAt(camX, camZ) + 0.8m` or river surface);
+  first-person mode toggle with crouch eye-level lowering; screen shake trauma
+  decay; and pure Java 4x4 LookAt view matrix calculation.
+- `TouchInput.java` updates: multi-touch pinch-to-zoom on the right side of the
+  screen (`zoomPointerId`, `lastPinchDist`, `deltaZoom`), seamless pointer hand-off.
+- `GameView.java` & `WorldRenderer.java` integration: `WorldRenderer` delegates
+  matrix calculation to `CameraRig`; `GameView` applies pinch zoom delta.
+- Tests: `tests/CameraTest.java` (9 groups, 42 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**. Total: **2,631 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 22 classes).
+- APK: built, 22,028,174 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2631/0.
+
+Known phase-4 limitations (tracked, see KNOWN_ISSUES.md):
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
 ### PHASE 5 — Touch controls — PLANNED
 - Full HUD layout settings (size/opacity/left-handed), extra action buttons.

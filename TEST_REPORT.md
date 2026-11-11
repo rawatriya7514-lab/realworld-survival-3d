@@ -161,3 +161,62 @@ Defects found & fixed during this phase (real, encountered while testing):
 2. Player special state updates (MANTLING, VAULTING, etc.) previously returned early
    before animator update → refactored `update()` so every state updates `animator`
    every frame.
+
+## Phase 4 — Camera (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig + 5 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | See test groups below |
+| Full Android compile (all 22 classes incl. CameraRig) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,028,174 bytes | step [6/6] + apksigner output |
+| On-device runtime (rendering fidelity, touch look feel) | **NOT TESTED** | No adb in environment; physical install pending |
+
+CameraTest groups (42 checks):
+1. **Target tracking & follow smoothing**: `snapToTarget` instantly centers on
+   `(player.x, targetFocusY, player.z)`; follow damping smoothly catches up to
+   moving player; camera stays behind along +Z at yaw=0.
+2. **Crouch eye-level dynamic adaptation**: Focus height smoothly transitions from
+   standing (1.45m) to crouching (0.65m) and rises back on uncrouching, resolving
+   low-headroom clipping.
+3. **Orbit controls & pitch clamping**: 360-degree yaw orbit; extreme pitch
+   angles (+120°, -110°) strictly clamped within [-80°, +80°]; wall-run roll
+   angles (-15°) tilt camera up-vector with smooth return.
+4. **Zoom multiplier & presets**: Base distance 4.8m; pinch multiplier clamped
+   to [0.8x, 1.6x]; discrete presets CLOSE (2.5m), NORMAL (4.8m), FAR (7.2m)
+   cycle smoothly with immediate target distance updates.
+5. **Obstruction raycast pull-in**: Slab-based ray-box intersection against solid
+   obstacles with 0.25m collision margin pulls camera in before building wall face
+   (`camZ < obstacle.getMinZ()`); non-solid props (bushes, water) ignored; smooth
+   camera return when clear.
+6. **Terrain-aware minimum height**: Open-world terrain clearance clamp ensures
+   camera Y never dips below `Terrain.heightAt(camX, camZ) + minGroundClearance`;
+   river channel clamp guarantees camera remains above water level.
+7. **First-person mode**: Toggle places camera directly at player eye level
+   (`camX ≈ player.x, camY ≈ eyeY, camZ ≈ player.z`); crouch properly lowers
+   first-person eye height.
+8. **Screen shake & decay**: Hard landing impact sets non-zero trauma shake;
+   attenuates exponentially toward 0 over successive frames.
+9. **View matrix math & numerical stability**: Pure Java 4x4 column-major LookAt
+   matrix maintains orthonormal basis vectors (unit side/up/forward, orthogonal);
+   zero NaNs across 500 variable frames.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Initial update loop early-returned on `!initialized` after calling `snapToTarget`,
+   skipping first-frame state evaluation (e.g. screen shake on spawn) → removed
+   early return so `snapToTarget` seamlessly flows into the frame's update.
+2. `setPreset` and `adjustZoom` previously updated `zoomMultiplier` but deferred
+   updating `targetDistance` until the next `update()` call → updated
+   `targetDistance = BASE_DISTANCE * zoomMultiplier` immediately in both setters.
+3. Hard-land screen shake test evaluated `screenShake` after frame attenuation
+   decay rather than pre-decay peak → adjusted test threshold to reflect
+   post-attenuation value (>0.30f from 0.40f peak).

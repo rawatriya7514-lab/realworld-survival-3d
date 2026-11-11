@@ -465,6 +465,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (touchInput.camTogglePressed) {
             player.firstPersonView = !player.firstPersonView;
         }
+        if (worldRenderer != null && Math.abs(touchInput.deltaZoom) > 0.0001f) {
+            worldRenderer.cameraRig.adjustZoom(touchInput.deltaZoom);
+        }
 
         // Open-world mode has its own loop (parkour flow continues below)
         if (activeMode == GameMode.OPEN_WORLD) {

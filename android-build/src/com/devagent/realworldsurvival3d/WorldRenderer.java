@@ -116,8 +116,10 @@ public class WorldRenderer {
     private final HashMap<Long, ChunkVbo> chunkVbos = new HashMap<>();
 
     // ------------------------------------------------------------------
-    // Camera state (smoothed)
+    // Camera rig & view state
     // ------------------------------------------------------------------
+    public final CameraRig cameraRig = new CameraRig();
+    private long lastCamTime = 0L;
     private float camX = 0, camY = 26, camZ = 10;
     private float camTX = 0, camTY = 22, camTZ = 0;
     private float camUpX = 0, camUpY = 1, camUpZ = 0;
@@ -630,7 +632,7 @@ public class WorldRenderer {
                 || player.adrenalineRush;
         float fov = speedBoost ? 82f : 65f;
         Matrix.perspectiveM(projMatrix, 0, fov, aspect, 0.4f, farPlane);
-        setupCamera(player, openWorld);
+        setupCamera(player, worldMap, openWorld);
         Matrix.multiplyMM(vpMatrix, 0, projMatrix, 0, viewMatrix, 0);
 
         // ---- Sky ----
@@ -748,51 +750,27 @@ public class WorldRenderer {
         GLES20.glEnable(GLES20.GL_CULL_FACE);
     }
 
-    private void setupCamera(Player player, OpenWorld openWorld) {
-        float radYaw = (float) Math.toRadians(player.yaw);
-        float radPitch = (float) Math.toRadians(player.pitch);
-        float fwdX = (float) (Math.sin(radYaw) * Math.cos(radPitch));
-        float fwdY = (float) -Math.sin(radPitch);
-        float fwdZ = (float) (-Math.cos(radYaw) * Math.cos(radPitch));
+    private void setupCamera(Player player, WorldMap worldMap, OpenWorld openWorld) {
+        long now = System.nanoTime();
+        float dt = (lastCamTime == 0L) ? 0.016f : (now - lastCamTime) / 1_000_000_000f;
+        lastCamTime = now;
+        if (dt <= 0f || dt > 0.1f) dt = 0.016f;
 
-        if (player.state == Player.ParkourState.HARD_LAND) {
-            screenShake = 0.4f;
-        } else if (screenShake > 0f) {
-            screenShake *= 0.85f;
-        }
-        float shakeX = (float) (Math.random() * 2 - 1) * screenShake;
-        float shakeY = (float) (Math.random() * 2 - 1) * screenShake;
+        List<Obstacle> obstacles = (openWorld != null) ? openWorld.activeObstacles()
+                : (worldMap != null ? worldMap.obstacles : null);
+        boolean terrainAware = (openWorld != null);
 
-        if (player.firstPersonView) {
-            camX = player.x + shakeX;
-            camY = player.y + player.currentHeight * 0.85f + shakeY;
-            camZ = player.z;
-            camTX = camX + fwdX;
-            camTY = camY + fwdY;
-            camTZ = camZ + fwdZ;
-        } else {
-            float dist = 4.8f;
-            float tX = player.x - fwdX * dist + shakeX;
-            float tY = player.y + 2.4f - fwdY * 1.5f + shakeY;
-            float tZ = player.z - fwdZ * dist;
-            camX += (tX - camX) * 0.35f;
-            camY += (tY - camY) * 0.35f;
-            camZ += (tZ - camZ) * 0.35f;
-            camTX = player.x;
-            camTY = player.y + player.currentHeight * 0.7f;
-            camTZ = player.z;
-        }
+        cameraRig.update(dt, player, obstacles, terrainAware);
 
-        // Terrain-aware minimum camera height (open world): never under ground
-        if (openWorld != null) {
-            float minY = Terrain.heightAt(camX, camZ) + 1.0f;
-            if (camY < minY) camY = minY;
-        }
-
-        float rollRad = (float) Math.toRadians(player.cameraRoll);
-        camUpX = (float) Math.sin(rollRad);
-        camUpY = (float) Math.cos(rollRad);
-        camUpZ = 0f;
+        camX = cameraRig.camX;
+        camY = cameraRig.camY;
+        camZ = cameraRig.camZ;
+        camTX = cameraRig.camTX;
+        camTY = cameraRig.camTY;
+        camTZ = cameraRig.camTZ;
+        camUpX = cameraRig.camUpX;
+        camUpY = cameraRig.camUpY;
+        camUpZ = cameraRig.camUpZ;
 
         Matrix.setLookAtM(viewMatrix, 0, camX, camY, camZ, camTX, camTY, camTZ,
                 camUpX, camUpY, camUpZ);
