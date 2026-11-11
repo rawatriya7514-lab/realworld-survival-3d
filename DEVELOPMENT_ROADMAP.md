@@ -10,7 +10,7 @@ possible (no adb available in this environment; see KNOWN_ISSUES.md).
 | 0 | Project audit + architecture docs | **DONE** | `PHASE-0` commit |
 | 1 | Game foundation: mode select, open-world scene loads playable | **DONE** | `PHASE-1` commit |
 | 2 | Movement: terrain locomotion, all states, collision | **DONE** | `PHASE-2` commit |
-| 3 | Animations: procedural state machine + blending | PLANNED | — |
+| 3 | Animations: procedural state machine + blending | **DONE** | `PHASE-3` commit |
 | 4 | Camera: follow, orbit, zoom, collision, terrain-aware | PLANNED | — |
 | 5 | Touch controls: joystick/buttons + layout settings | PLANNED | — |
 | 6 | World map: fullscreen map, minimap, waypoints, navigation | PLANNED | — |
@@ -142,11 +142,41 @@ Test results (real, this session):
 
 Known phase-2 limitations (tracked, see KNOWN_ISSUES.md):
 - Camera height follows standing eye-level during crouch (offset lowers in Phase 4).
-- Procedural limb animations not yet speed-matched (Phase 3).
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 3 — Animations — PLANNED
-- Procedural limb animation with blending + speed matching (fallback approach,
-  disclosed in GDD §7). Gate: JVM blending checks.
+### PHASE 3 — Animations (2026-11-11) — DONE
+Scope: procedural articulated limb animation system with speed matching and
+cross-fade blending for box-composite humanoids across all 18 movement and parkour
+states (WALK, JOG, RUN, SPRINT, CROUCH, STAND, JUMP, DOUBLE_JUMP, FALLING,
+LAND, HARD_LAND, SAFETY_ROLL, SLIDING, MANTLING, VAULTING, WALL_RUN_LEFT,
+WALL_RUN_RIGHT, DEAD).
+
+What was built (all original code):
+- `CharacterAnimator.java` (new, pure Java): full articulated pose model
+  (torso, head, left/right arms, left/right legs) with pitch/yaw/roll rotations
+  and offsets; speed-matched dynamic gait frequencies: STAND (0), WALK (8.5),
+  JOG (12.0), RUN (15.0), SPRINT (19.0 rad/s); natural sinusoidal breathing idle
+  oscillation; smooth 0.18s cross-fade pose blending with sinusoidal easing;
+  full 360-degree safety roll rotation; knee compression on landing; banking
+  on wall-runs.
+- `Player.java` integration: animator initialized and updated unconditionally
+  every frame across all movement, parkour, and special states.
+- `WorldRenderer.java` integration: hierarchical limb transformation rendering
+  using `Mat4` (torso -> head, left/right shoulders -> arms, hips -> legs)
+  with team/player palette accents.
+- Tests: `tests/AnimationTest.java` (8 groups, 30 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**. Total: **2,589 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 21 classes).
+- APK: built, 22,024,078 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2589/0.
+
+Known phase-3 limitations (tracked, see KNOWN_ISSUES.md):
+- Camera height follows standing eye-level during crouch (offset lowers in Phase 4).
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
 ### PHASE 4 — Camera — PLANNED
 - Orbit/zoom/collision pull-in + terrain-aware min height settings.

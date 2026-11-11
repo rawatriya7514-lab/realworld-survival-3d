@@ -140,6 +140,9 @@ public class Player {
     public Terrain terrain = null;
     public float waterLevel = Terrain.WATER_LEVEL;
 
+    /** Procedural limb animation state machine. */
+    public final CharacterAnimator animator = new CharacterAnimator();
+
     public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
                        boolean slidePressed, boolean sprintToggled, List<Obstacle> obstacles) {
         update(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, false, obstacles);
@@ -148,7 +151,10 @@ public class Player {
     public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
                        boolean slidePressed, boolean sprintToggled, boolean crouchPressed,
                        List<Obstacle> obstacles) {
-        if (state == ParkourState.DEAD) return;
+        if (state == ParkourState.DEAD) {
+            animator.update(dt, state, 0f, isGrounded);
+            return;
+        }
 
         // Combo decay
         if (comboTimer > 0f) {
@@ -192,37 +198,49 @@ public class Player {
         }
 
         // Execute specific state updates
+        boolean handled = false;
         switch (state) {
             case MANTLING:
                 updateMantling(dt);
-                return;
+                handled = true;
+                break;
             case VAULTING:
                 updateVaulting(dt);
-                return;
+                handled = true;
+                break;
             case SLIDING:
                 updateSliding(dt, jumpPressed, obstacles);
-                return;
+                handled = true;
+                break;
             case SAFETY_ROLL:
                 updateSafetyRoll(dt, obstacles);
-                return;
+                handled = true;
+                break;
             case HARD_LAND:
                 updateHardLand(dt);
-                return;
+                handled = true;
+                break;
             case LAND:
                 if (!updateLand(dt, moveInputX, moveInputY)) {
-                    return;
+                    handled = true;
                 }
                 break;
             case WALL_RUN_LEFT:
             case WALL_RUN_RIGHT:
                 updateWallRunning(dt, jumpPressed, obstacles);
-                return;
+                handled = true;
+                break;
             default:
                 break;
         }
 
-        // Normal Ground & Air locomotion
-        handleMovement(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, crouchPressed, obstacles);
+        if (!handled) {
+            handleMovement(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, crouchPressed, obstacles);
+        }
+
+        // Advance procedural character animator
+        float horizSpeed = (float) Math.sqrt(vx * vx + vz * vz);
+        animator.update(dt, state, horizSpeed, isGrounded);
     }
 
     public boolean canStandUp(List<Obstacle> obstacles) {

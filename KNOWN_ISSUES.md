@@ -40,12 +40,12 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 2)
+## Open issues (Phase 3)
 1. **Camera height does not yet lower when crouching** — player collision
    bounding box and visual model crouch properly (height drops to 0.8 m), but
    camera height follows standing head offset until Camera Phase 4.
-2. **Procedural limb animations not yet speed-matched** — animation state
-   machine and blending land in Phase 3.
+2. **HunterEnemy uses single-box model** — HunterEnemy is rendered with single-cube
+   body + glowing visor; full enemy animation rig planned for Phase 8 AI.
 
 ## Resolved during development
 - PHASE 1: flat-channel trap on entering deep water (strictly-deeper rule),
@@ -57,3 +57,8 @@ Maintained per phase; nothing is hidden.
   step-up detection probe margin aligned with collision radius (prevents
   premature wall push-out before step-up), headroom validation on uncrouch
   and step-up (prevents clipping through low ceilings). Details: TEST_REPORT.md §Phase 2.
+- PHASE 3: procedural limb animation state machine for box-composite humanoid
+  (torso, head, arms, legs), speed-matched dynamic gait frequencies (WALK 8.5,
+  JOG 12.0, RUN 15.0, SPRINT 19.0 rad/s), 0.18s cross-fade pose blending,
+  breathing idle cycle, full 360-deg safety roll rotation, and renderer
+  articulated limb transformation matrix hierarchy. Details: TEST_REPORT.md §Phase 3.

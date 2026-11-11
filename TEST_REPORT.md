@@ -114,3 +114,50 @@ Defects found & fixed during this phase (real, encountered while testing):
    evaluate → aligned probe margin to 1.0*radius.
 4. Overhead ceiling check needed to ignore the step-up surface itself while checking
    for overhead obstacles above `targetY + currentHeight` → added headroom filter.
+
+## Phase 3 — Animations (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item + 4 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | See test groups below |
+| Full Android compile (all 21 classes incl. CharacterAnimator) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,024,078 bytes | step [6/6] + apksigner output |
+| On-device runtime (rendering fidelity, GPU skinning FPS) | **NOT TESTED** | No adb in environment; physical install pending |
+
+AnimationTest groups (30 checks):
+1. **Gait frequency speed matching**: Monotonic progression strictly verified:
+   STAND (0) < WALK (8.5 rad/s) < JOG (12.0 rad/s) < RUN (15.0 rad/s) < SPRINT (19.0 rad/s).
+2. **STAND breathing pose**: Subtle sinusoidal vertical breathing bob (±0.015 m)
+   with straight vertical legs and relaxed arm offsets (±7 deg roll).
+3. **Locomotion poses & speed scaling**: RUN forward torso lean (15 deg); arm and
+   leg counter-swinging verified over complete gait strides; SPRINT forward lean (24 deg)
+   strictly exceeds RUN lean.
+4. **Crouch pose**: Torso drops by 0.42 m; forward crouch lean (24 deg); knees bent (42 deg);
+   subtle arm/leg swing when moving crouched.
+5. **Airborne and landing poses**: JUMP raises arms (-65 deg); DOUBLE_JUMP tucks arms
+   higher (-85 deg); FALLING spreads arms outwards for balance (roll ±38 deg);
+   LAND squats knees and compresses torso down (-0.24 m).
+6. **Agility poses**: SLIDING leans torso back (-32 deg) and kicks legs forward (-68 deg);
+   SAFETY_ROLL progresses rotation continuously through 360 deg; WALL_RUN_LEFT/RIGHT
+   banks torso by ±20 deg; DEAD collapses flat on floor (90 deg pitch).
+7. **Cross-fade blending**: 0.18s smooth transition between arbitrary states;
+   halfway blend at ~0.09s (blendProgress ≈ 0.5); full blend at 0.18s (blendProgress = 1.0).
+8. **Numerical stability**: 600 variable-rate updates across all 18 states with
+   zero NaNs, infinities, or invalid limb matrices.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Breathing oscillation test initially ran for only 60 frames (1.0s) which covered
+   only the positive half of the 2.2 rad/s sine wave (inhalation) without reaching
+   the negative trough (exhalation) → extended test duration to 180 frames (3.0s).
+2. Player special state updates (MANTLING, VAULTING, etc.) previously returned early
+   before animator update → refactored `update()` so every state updates `animator`
+   every frame.

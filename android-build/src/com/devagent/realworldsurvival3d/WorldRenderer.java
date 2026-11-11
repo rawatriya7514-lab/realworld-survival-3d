@@ -701,15 +701,20 @@ public class WorldRenderer {
         }
 
         if (!player.firstPersonView && player.state != Player.ParkourState.DEAD) {
-            float w = (player.state == Player.ParkourState.SLIDING
-                    || player.state == Player.ParkourState.SAFETY_ROLL
-                    || player.state == Player.ParkourState.CROUCH) ? 1.05f : 0.75f;
-            float h = player.currentHeight;
             float tintR = player.adrenalineRush ? 1.0f : 0.25f;
             float tintG = player.adrenalineRush ? 0.85f : 0.7f;
             float tintB = player.adrenalineRush ? 0.15f : 1.0f;
-            drawCharacter(player.x, player.y, player.z, -player.yaw, w, h, w, TEX_RUNNER,
-                    tintR, tintG, tintB);
+            if (player.animator != null && player.animator.currentPose != null) {
+                drawAnimatedCharacter(player.x, player.y, player.z, -player.yaw,
+                        player.animator.currentPose, TEX_RUNNER, tintR, tintG, tintB);
+            } else {
+                float w = (player.state == Player.ParkourState.SLIDING
+                        || player.state == Player.ParkourState.SAFETY_ROLL
+                        || player.state == Player.ParkourState.CROUCH) ? 1.05f : 0.75f;
+                float h = player.currentHeight;
+                drawCharacter(player.x, player.y, player.z, -player.yaw, w, h, w, TEX_RUNNER,
+                        tintR, tintG, tintB);
+            }
         }
 
         // Blob shadows
@@ -974,6 +979,80 @@ public class WorldRenderer {
                                int tex, float tr, float tg, float tb) {
         drawCube(x, y + h * 0.5f, z, yawDeg, w, h, d, tex, tr, tg, tb,
                 1f, 1f, 1f, 0.3f, 1f);
+    }
+
+    private void drawAnimatedCharacter(float x, float y, float z, float yawDeg,
+                                      CharacterAnimator.Pose pose,
+                                      int tex, float tr, float tg, float tb) {
+        float[] base = Mat4.trs(x, y, z, yawDeg, 1f, 1f, 1f);
+
+        // 1. Torso
+        float torsoCenterY = 1.05f + pose.torsoOffsetY;
+        float[] mTorso = Mat4.identity();
+        System.arraycopy(base, 0, mTorso, 0, 16);
+        Mat4.mul(mTorso, Mat4.translate(0f, torsoCenterY, 0f));
+        if (pose.torsoRoll != 0f) Mat4.mul(mTorso, Mat4.rotZ(pose.torsoRoll));
+        if (pose.torsoPitch != 0f) Mat4.mul(mTorso, Mat4.rotX(pose.torsoPitch));
+        if (pose.torsoYaw != 0f) Mat4.mul(mTorso, Mat4.rotY(pose.torsoYaw));
+
+        float[] mTorsoCube = Mat4.identity();
+        System.arraycopy(mTorso, 0, mTorsoCube, 0, 16);
+        Mat4.mul(mTorsoCube, Mat4.scale(0.46f, 0.60f, 0.28f));
+        drawCubeModel(mTorsoCube, tex, tr, tg, tb, 1f, 1f, 1f, 0.3f, 1f);
+
+        // 2. Head
+        float[] mHead = Mat4.identity();
+        System.arraycopy(mTorso, 0, mHead, 0, 16);
+        Mat4.mul(mHead, Mat4.translate(0f, 0.45f, 0.02f));
+        if (pose.headRoll != 0f) Mat4.mul(mHead, Mat4.rotZ(pose.headRoll));
+        if (pose.headPitch != 0f) Mat4.mul(mHead, Mat4.rotX(pose.headPitch));
+        if (pose.headYaw != 0f) Mat4.mul(mHead, Mat4.rotY(pose.headYaw));
+        Mat4.mul(mHead, Mat4.scale(0.28f, 0.28f, 0.28f));
+        drawCubeModel(mHead, tex, tr * 1.15f, tg * 1.15f, tb * 1.15f, 1f, 1f, 1f, 0.4f, 1f);
+
+        // 3. Left Arm
+        float[] mLArm = Mat4.identity();
+        System.arraycopy(mTorso, 0, mLArm, 0, 16);
+        Mat4.mul(mLArm, Mat4.translate(-0.30f, 0.22f, 0f));
+        if (pose.leftArmRoll != 0f) Mat4.mul(mLArm, Mat4.rotZ(pose.leftArmRoll));
+        if (pose.leftArmPitch != 0f) Mat4.mul(mLArm, Mat4.rotX(pose.leftArmPitch));
+        if (pose.leftArmYaw != 0f) Mat4.mul(mLArm, Mat4.rotY(pose.leftArmYaw));
+        Mat4.mul(mLArm, Mat4.translate(0f, -0.26f, 0f));
+        Mat4.mul(mLArm, Mat4.scale(0.14f, 0.54f, 0.14f));
+        drawCubeModel(mLArm, tex, tr * 0.9f, tg * 0.9f, tb * 0.9f, 1f, 1f, 1f, 0.25f, 1f);
+
+        // 4. Right Arm
+        float[] mRArm = Mat4.identity();
+        System.arraycopy(mTorso, 0, mRArm, 0, 16);
+        Mat4.mul(mRArm, Mat4.translate(0.30f, 0.22f, 0f));
+        if (pose.rightArmRoll != 0f) Mat4.mul(mRArm, Mat4.rotZ(pose.rightArmRoll));
+        if (pose.rightArmPitch != 0f) Mat4.mul(mRArm, Mat4.rotX(pose.rightArmPitch));
+        if (pose.rightArmYaw != 0f) Mat4.mul(mRArm, Mat4.rotY(pose.rightArmYaw));
+        Mat4.mul(mRArm, Mat4.translate(0f, -0.26f, 0f));
+        Mat4.mul(mRArm, Mat4.scale(0.14f, 0.54f, 0.14f));
+        drawCubeModel(mRArm, tex, tr * 0.9f, tg * 0.9f, tb * 0.9f, 1f, 1f, 1f, 0.25f, 1f);
+
+        // 5. Left Leg
+        float[] mLLeg = Mat4.identity();
+        System.arraycopy(base, 0, mLLeg, 0, 16);
+        Mat4.mul(mLLeg, Mat4.translate(-0.13f, 0.72f + pose.torsoOffsetY * 0.5f, 0f));
+        if (pose.leftLegRoll != 0f) Mat4.mul(mLLeg, Mat4.rotZ(pose.leftLegRoll));
+        if (pose.leftLegPitch != 0f) Mat4.mul(mLLeg, Mat4.rotX(pose.leftLegPitch));
+        if (pose.leftLegYaw != 0f) Mat4.mul(mLLeg, Mat4.rotY(pose.leftLegYaw));
+        Mat4.mul(mLLeg, Mat4.translate(0f, -0.34f, 0f));
+        Mat4.mul(mLLeg, Mat4.scale(0.18f, 0.70f, 0.18f));
+        drawCubeModel(mLLeg, tex, tr * 0.75f, tg * 0.75f, tb * 0.75f, 1f, 1f, 1f, 0.2f, 1f);
+
+        // 6. Right Leg
+        float[] mRLeg = Mat4.identity();
+        System.arraycopy(base, 0, mRLeg, 0, 16);
+        Mat4.mul(mRLeg, Mat4.translate(0.13f, 0.72f + pose.torsoOffsetY * 0.5f, 0f));
+        if (pose.rightLegRoll != 0f) Mat4.mul(mRLeg, Mat4.rotZ(pose.rightLegRoll));
+        if (pose.rightLegPitch != 0f) Mat4.mul(mRLeg, Mat4.rotX(pose.rightLegPitch));
+        if (pose.rightLegYaw != 0f) Mat4.mul(mRLeg, Mat4.rotY(pose.rightLegYaw));
+        Mat4.mul(mRLeg, Mat4.translate(0f, -0.34f, 0f));
+        Mat4.mul(mRLeg, Mat4.scale(0.18f, 0.70f, 0.18f));
+        drawCubeModel(mRLeg, tex, tr * 0.75f, tg * 0.75f, tb * 0.75f, 1f, 1f, 1f, 0.2f, 1f);
     }
 
     private void drawCube(float x, float y, float z, float rotDeg,
