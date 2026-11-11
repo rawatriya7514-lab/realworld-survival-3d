@@ -1,111 +1,114 @@
-# REALWORLD SURVIVAL 3D - PARKOUR EDITION
+# REALWORLD SURVIVAL 3D — Parkour Edition
 
-An intensive 3D Third-Person & First-Person Rooftop Parkour Survival Game built natively for Android.
+A complete, playable 3D rooftop-parkour survival game for Android, written in
+Java with a custom GLES2 renderer. No game engine — the renderer, physics,
+AI, UI, audio, and build pipeline are all original code in this repository.
 
-## Project Overview
-- **Project Path:** `/data/data/com.termux/files/home/realworld-survival-3d/`
-- **Native APK:** `RealWorldSurvival3D.apk` (**169,738,058 bytes / ~162 MB**)
-- **Package Name:** `com.devagent.realworldsurvival3d`
-- **Android Target:** Min SDK 24 (Android 7.0), Target SDK 34 (Android 14)
-- **Signature Schemes:** Signed with APK Signature Scheme v2 & v3 (Verified)
+## At a Glance
 
----
+| | |
+|---|---|
+| **APK** | `RealWorldSurvival3D.apk` at the project root and in `android-build/` |
+| **APK size** | 22,007,694 bytes (~21 MB) |
+| **Package** | `com.devagent.realworldsurvival3d` · versionCode 2 · versionName 1.1 |
+| **Android** | minSdk 24 (Android 7.0), targetSdk 34 · landscape · GLES 2.0 |
+| **Permissions** | `VIBRATE` only (no network, no storage access) |
+| **Signing** | Debug keystore, verified with APK Signature Schemes v1 + v2 + v3 |
+| **Language** | Java (17 classes, ~7,500 lines), compiled with javac 21, dexed with d8 |
+| **Testing** | 2,432 JVM logic checks pass / 0 fail (`sh tests/run.sh`) |
 
-## 🏃 Deep Research & Parkour Mechanics Breakdown
+## What the Game Is
 
-Inspired by *Mirror's Edge*, *Dying Light*, and *Vector*, RealWorld Survival 3D Parkour Edition implements a comprehensive physics-based acrobatic survival engine:
+You are a parkour runner on a lockdown city skyline. Three escalating missions
+send you across ten skyscrapers, balance beams, wall-run billboards and fan
+boosters while infected rooftop chasers hunt you. Collect survival items,
+chain parkour combos to fill your adrenaline meter, and reach (or signal) the
+extraction helipad before the chasers get you.
 
-### 1. Locomotion & Momentum
-- **Ground Movement:** Smooth analog walk, run, and turbo sprint with inertia and momentum preservation.
-- **Dynamic FOV Expansion:** Perspective field of view zooms from 65° to 82° during sprint, wall-runs, and adrenaline bursts for an authentic sense of speed.
-- **Head Bob & Camera Tilt:** Subtle rhythmic bobbing during strides and landing compression dips.
+**Missions**
 
-### 2. Full Parkour Actions
-- **Wall Running (Left & Right):**
-  - When leaping near vertical building faces or billboards, runner attaches horizontally to wall surfaces.
-  - 75% gravity reduction while gliding forward along the wall at 12.5 m/s for up to 2.0 seconds.
-  - Dutch-angle dynamic camera roll (±15°) immersion.
-  - **Wall Kick Jump:** Tapping Jump during a wall run launches the runner off the wall with high outward/forward impulse to bridge massive rooftop gaps.
-- **Ledge Grab & Mantling:**
-  - Forward ray & box detection detects roof ledges while airborne.
-  - Character grips ledges and smoothly mantles up onto the rooftop surface with sine-interpolated biomechanical motion.
-- **Hurdle Vaulting:**
-  - Sprinting toward waist-high obstacles (AC units, concrete parapets, solar racks) initiates a high-momentum hurdle vault without losing velocity.
-- **Knee Slide:**
-  - Tapping Slide while sprinting executes a low-clearance baseball slide, dropping the collision height by 60% to slip under low pipes and barriers.
-  - Can be canceled into a Slide-Kick jump to tackle pursuing enemies!
-- **High-Fall Safety Roll (0 Fall Damage):**
-  - Dropping from heights > 5.0m will severely injure or kill the runner unless they execute a safety parkour roll!
-  - Tapping Slide/Roll upon landing performs a tuck-and-roll, converting vertical kinetic energy into an explosive forward sprint with **0 damage taken**.
-  - Unrolled landings cause severe fall damage (8 HP per meter), camera bone-shake, and hard land stun.
+1. *Rooftop Infiltration* — parkour east across the towers to the gold helipad.
+2. *Scavenger's High-Rise* — collect 6 survival items, then reach the Apex helipad.
+3. *Apex Extraction* — recover 3 data drives, then use the helipad console to
+   signal extraction (contextual INTERACT button).
 
-### 3. Survival & Vital Systems
-- **Stamina Dynamics:**
-  - 100 Stamina pool consumed by sprint (-12/s), wall run (-14/s), vault (-8), mantle (-8), slide (-10).
-  - Stamina < 20% triggers heavy breathing audio loop and disables sprinting.
-  - Rapid regeneration (+18/s) when walking or resting.
-- **Adrenaline Combo Multiplier:**
-  - Chaining parkour maneuvers (Vault -> Wall Run -> Leap -> Roll) builds a combo multiplier (x2, x3, x5).
-  - 100 Adrenaline triggers **Adrenaline Rush**: 1.25x speed boost, golden motion trail, and temporary infinite stamina!
-- **Hostile Rooftop Chasers (Hunter Stalkers):**
-  - Intelligent AI that patrols skyscrapers, spots the runner, sounds alarm shrieks, and pursues across rooftops.
-  - Can leap across rooftop gaps.
-  - Player can stun/eliminate chasers using high-altitude drop kicks or slide tackles!
-- **Survival Scavenging:**
-  - **Energy Drinks:** Instant max stamina + adrenaline boost.
-  - **Survival Medkits:** Restores +45 Health.
-  - **Parkour Tokens:** Collectible tokens rewarding agility across narrow balance beams.
-  - **Data Drives:** Extraction keys required for high-tier missions.
+**Systems implemented**
 
----
+- Parkour movement: walk/run/sprint, jump, double jump, wall-run (left/right)
+  with wall-kick, ledge grab + mantle, vault, slide, slide-kick, high-fall
+  safety roll, fall damage, stamina, adrenaline combos.
+- Hunter chaser AI: roof-bounded patrol, detection, same-roof chase,
+  edge-to-edge leaps across short gaps, give-up timer, attacks; defeated by
+  drop-stomps and slide tackles (never flies, never teleports).
+- Interaction system with on-screen prompts (data drives, extraction console).
+- GLES2 renderer: directional sun (Lambert) + hemisphere ambient +
+  Blinn-Phong specular, exponential fog, sky gradient, textured surfaces
+  (8 POT textures), blob shadows, extraction compass arrow, camera shake/roll,
+  dynamic FOV. Performance/High quality presets.
+- Audio: SoundPool SFX engine (18 sounds incl. breathing/heartbeat loops) +
+  MediaPlayer music (5 seamless loop tracks, per-mission playlists), separate
+  music/SFX volume settings.
+- Full menu flow: main menu, settings, pause, game over, mission complete,
+  about. HUD: health/stamina bars, mission tracker, prompts, minimap-style
+  compass (in-GL), damage flash + haptics.
+- Persistence: progress save/load (mission, score, currency, items, health,
+  best score) and separate settings storage (music/SFX volume, look
+  sensitivity, invert-Y, quality, 30/60 FPS limit).
 
-## 🎮 Mobile Controls Guide
+## Controls
 
 | Control | Location | Action |
 |---|---|---|
-| **Analog Joystick** | Bottom-Left Area | 360° Omnidirectional movement |
-| **Camera Swipe** | Right Screen Area | Pitch (-80° to 80°) and Yaw (360°) look |
-| **JUMP Button** | Bottom-Right (Blue) | Ground jump, Double-jump, Wall-kick, Mantle |
-| **VAULT Button** | Bottom-Right (Yellow) | Contextual vault over waist-high obstacles |
-| **SLIDE / ROLL** | Bottom-Right (Orange) | Low knee slide & high-fall landing roll |
-| **SPRINT Toggle** | Bottom-Right (Red/Grey) | Turbo sprint toggle (consumes stamina) |
-| **CAM Switch** | Top-Right (Grey) | Switch between 3rd-Person & 1st-Person view |
+| Analog joystick | left 45% of screen | 360° movement (dynamic base) |
+| Camera swipe | right 55% of screen | yaw/pitch look (sensitivity + invert-Y in Settings) |
+| JUMP | bottom-right (large) | jump / double jump / wall-kick / slide-kick |
+| VAULT | bottom-right | vault waist-high obstacles (while sprinting) |
+| SLIDE | bottom-right | knee slide; landing roll (negates fall damage) |
+| SPRINT | bottom-right | sprint toggle (stamina) |
+| INTERACT | mid-right (contextual) | collect data drives / signal console |
+| CAM | top-right | 3rd ↔ 1st person |
+| PAUSE | top-right (left of CAM) | pause menu |
+| Back button | system | pause/resume in game |
 
----
+Full details: `controls-guide.md`.
 
-## 🎧 High-Fidelity Audio Soundbank & Studio Soundtracks
+## Build & Install
 
-The package bundles **over 160 MB** of uncompressed 44.1kHz 16-bit studio audio:
-
-### Music Tracks (`assets/audio/music/`):
-1. `bgm_parkour_rush.wav` (142 BPM Breakbeat / Synthwave parkour theme)
-2. `bgm_chase.wav` (160 BPM Tense dark Phrygian pursuit rhythm)
-3. `bgm_survival_ambient.wav` (95 BPM Rooftop wind & atmospheric synth pads)
-4. `bgm_apex_tower.wav` (High-octane apex extraction theme)
-5. `bgm_free_run.wav` (Endless rooftop parkour free-run soundtrack)
-
-### Sound Effects (`assets/audio/sfx/`):
-- `footstep_concrete.wav`, `footstep_metal.wav`
-- `jump.wav`, `double_jump.wav`
-- `wallrun.wav` (Continuous friction skid loop)
-- `vault.wav`, `ledge_grab.wav`, `mantle.wav`
-- `slide.wav`, `roll.wav`
-- `hard_land.wav`, `heavy_breath.wav`, `heartbeat.wav`
-- `pickup_drink.wav`, `pickup_medkit.wav`, `pickup_token.wav`
-- `chaser_roar.wav`, `level_win.wav`, `game_over.wav`
-
----
-
-## 📦 Build & Installation
-
-### Quick Build (Native Android Toolchain)
 ```bash
 cd /data/data/com.termux/files/home/realworld-survival-3d
-./export-and-build.sh debug
+./export-and-build.sh debug        # produces RealWorldSurvival3D.apk
+sh tests/run.sh                    # optional: run the 2,432-check logic suite
 ```
 
-### Install to Android Device
-```bash
-adb install RealWorldSurvival3D.apk
+Install on a device: `adb install -r RealWorldSurvival3D.apk`, or copy the APK
+to the device and open it (allow "install unknown apps" when prompted). On this
+Termux device, `termux-open RealWorldSurvival3D.apk` hands the APK to the
+system package installer.
+
+## Project Layout
+
 ```
-Or open the APK directly on Android via Termux or file manager.
+android-build/            Native Android app (the shipped game)
+  src/.../*.java          17 game classes (renderer, physics, AI, UI, audio…)
+  AndroidManifest.xml     minSdk 24, targetSdk 34, VIBRATE only
+  res/                    theme, strings, icon mipmaps
+  assets/                 8 textures, 6 OBJ props, 5 music loops, 17 SFX
+export-and-build.sh       javac → d8 → aapt2 → dex-inject → zipalign → apksigner
+generate_music.py         Regenerates the 5 music loops (canonical source)
+generate_assets.py        Procedural texture/SFX/model generator
+tests/GameLogicTest.java  2,432-check JVM suite for physics/AI/world logic
+tests/run.sh              Test runner (pure JVM, no device needed)
+```
+
+The `project.godot`, `scenes/`, `scripts/`, `shaders/` folders are an unused
+Godot 4 skeleton kept for reference; Godot cannot run in this environment
+(see `known-limitations.md`). The native Android build is the shipped game.
+
+## Documentation
+
+- `build-instructions.md` — full build pipeline
+- `controls-guide.md` — touch layout and button behavior
+- `feature-list.md` — feature checklist with verification status
+- `testing-results.md` — test results (JVM tests pass; device tests not run)
+- `known-limitations.md` — honest current limits
+- `QA_AUDIT_REPORT.md` — quality audit history and bug fixes

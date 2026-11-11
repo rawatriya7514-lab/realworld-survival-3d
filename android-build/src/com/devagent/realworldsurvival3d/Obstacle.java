@@ -13,7 +13,13 @@ public class Obstacle {
         BALANCE_BEAM,
         JUMP_PAD,
         HAZARD_POOL,
-        EXTRACTION_HELIPAD
+        EXTRACTION_HELIPAD,
+        // Rooftop & street dressing props (also solid colliders)
+        VENT,
+        AC_UNIT,
+        ANTENNA,
+        WATER_TANK,
+        CONSOLE
     }
 
     public Type type;
@@ -73,6 +79,36 @@ public class Obstacle {
             case EXTRACTION_HELIPAD:
                 this.r = 1.00f; this.g = 0.90f; this.b = 0.00f; // Gold landing circle
                 this.climbable = true;
+                this.wallRunnable = false;
+                this.vaultable = false;
+                break;
+            case VENT:
+                this.r = 0.62f; this.g = 0.60f; this.b = 0.55f; // Brushed aluminum
+                this.climbable = true;
+                this.wallRunnable = false;
+                this.vaultable = true;
+                break;
+            case AC_UNIT:
+                this.r = 0.55f; this.g = 0.58f; this.b = 0.62f; // Industrial gray
+                this.climbable = true;
+                this.wallRunnable = false;
+                this.vaultable = true;
+                break;
+            case ANTENNA:
+                this.r = 0.30f; this.g = 0.32f; this.b = 0.35f; // Dark steel
+                this.climbable = false;
+                this.wallRunnable = false;
+                this.vaultable = false;
+                break;
+            case WATER_TANK:
+                this.r = 0.45f; this.g = 0.38f; this.b = 0.30f; // Weathered tank
+                this.climbable = true;
+                this.wallRunnable = false;
+                this.vaultable = false;
+                break;
+            case CONSOLE:
+                this.r = 0.90f; this.g = 0.75f; this.b = 0.20f; // Signal console
+                this.climbable = false;
                 this.wallRunnable = false;
                 this.vaultable = false;
                 break;

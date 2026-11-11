@@ -3,27 +3,35 @@ package com.devagent.realworldsurvival3d;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.opengl.GLSurfaceView;
-import android.view.MotionEvent;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import java.util.ArrayList;
 import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 /**
- * GameView - Main loop & event controller for REALWORLD SURVIVAL 3D (Parkour Edition).
+ * GameView - Main loop & event controller for REALWORLD SURVIVAL 3D.
  * Coordinates:
- *   - OpenGL ES 3D Renderer (WorldRenderer)
+ *   - GLES2 Renderer (WorldRenderer)
  *   - Multi-Touch Controls (TouchInput)
  *   - Parkour Character Physics (Player)
  *   - High-Altitude World Layout (WorldMap)
  *   - Rooftop Chaser Stalkers (HunterEnemy)
  *   - Survival Item Pickups (Item)
  *   - Low-Latency Audio Engine (GameAudioManager)
+ *   - Menus / HUD (UIController) and persistence (SaveManager, GameSettings)
+ *
+ * Gameplay loop: menu -> mission briefing -> explore & collect -> evade or
+ * stomp chasers -> reach (and on mission 3, signal) the extraction helipad ->
+ * mission complete -> next mission / save.
  */
-public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer {
+public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
+        UIController.Callbacks {
 
     public enum GameState { MENU, PLAYING, PAUSED, GAMEOVER, MISSION_COMPLETE }
-    private GameState currentState = GameState.PLAYING;
+    private GameState currentState = GameState.MENU;
 
     // Core Systems
     private Player player;
@@ -33,45 +41,102 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer {
     private WorldRenderer worldRenderer;
     private TouchInput touchInput;
     private GameAudioManager audioManager;
-    private SharedPreferences prefs;
+    private SaveManager saveManager;
+    private GameSettings settings;
+    private UIController ui;
+    private Vibrator vibrator;
+    private Context context;
 
     // Timing
     private long lastFrameTime;
     private float deltaTime;
+    private long frameBudgetNs = 0;
 
     // Missions
     public int currentMission = 1;
     public int itemsCollected = 0;
-    public int requiredItems = 5;
+    public int requiredItems = 0;
     public float missionTimer = 0f;
-    public String missionTitle = "Rooftop Infiltration";
-    public String missionGoal = "Wall-run across the chasm to the extraction tower!";
+    public String missionTitle = "";
+    public String missionGoal = "";
+    private boolean beaconActivated = false;
+    private boolean finalMissionCompleted = false;
+    private int completedMissions = 0;
 
-    public GameView(Context context) {
+    // Interaction state
+    private Item interactTargetItem = null;
+    private boolean interactTargetConsole = false;
+    private String interactPrompt = null;
+    private String toastMessage = null;
+    private float toastTimer = 0f;
+
+    // Player feedback bookkeeping
+    private float lastPlayerHealth = 100f;
+    private float regenDelay = 0f;
+    private float beaconPulse = 0f;
+
+    // Music per mission
+    private static final String MUSIC_MENU = "audio/music/bgm_survival_ambient.wav";
+    private static final String MUSIC_M1 = "audio/music/bgm_parkour_rush.wav";
+    private static final String MUSIC_M2 = "audio/music/bgm_apex_tower.wav";
+    private static final String MUSIC_M3 = "audio/music/bgm_chase.wav";
+
+    // Settings change flag from UI thread
+    private volatile boolean settingsDirty = false;
+
+    public GameView(Context context, GameSettings settings) {
         super(context);
+        this.context = context;
+        this.settings = settings;
+        setEGLContextClientVersion(2);
+        setEGLConfigChooser(8, 8, 8, 8, 16, 0);
+        setPreserveEGLContextOnPause(true);
         setRenderer(this);
         setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
-        prefs = context.getSharedPreferences("RWSurvivalParkour", Context.MODE_PRIVATE);
+        vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        saveManager = new SaveManager(context);
+        audioManager = new GameAudioManager(context);
+        applyAudioSettings();
+        applyFrameBudget();
 
-        // Initialize Systems
         player = new Player();
         worldMap = new WorldMap();
         chasers = new ArrayList<>();
         items = new ArrayList<>();
-        worldRenderer = new WorldRenderer();
-        touchInput = new TouchInput();
-        audioManager = new GameAudioManager(context);
 
-        spawnMissions(currentMission);
-
-        lastFrameTime = System.currentTimeMillis();
+        completedMissions = saveManager.loadInt("completed_missions", 0);
+        currentMission = saveManager.loadInt("current_mission", 1);
+        if (currentMission < 1 || currentMission > 3) currentMission = 1;
     }
 
+    /** Called by GameActivity after UIController exists. */
+    public void attachUi(UIController ui) {
+        this.ui = ui;
+        showMenuState();
+    }
+
+    private void applyAudioSettings() {
+        audioManager.setMusicVolume(GameSettings.toVolume(settings.musicVolume));
+        audioManager.setSfxVolume(GameSettings.toVolume(settings.sfxVolume));
+    }
+
+    private void applyFrameBudget() {
+        frameBudgetNs = settings.fpsLimit == GameSettings.FPS_30
+                ? 33_000_000L : 0L;
+    }
+
+    // =================================================================
+    // Missions
+    // =================================================================
     public void spawnMissions(int missionIndex) {
         currentMission = missionIndex;
         itemsCollected = 0;
         missionTimer = 0f;
+        beaconActivated = false;
+        interactPrompt = null;
+        toastMessage = null;
+        toastTimer = 0f;
 
         // Reset player on starting roof (Tower Alpha)
         player.x = 0f;
@@ -83,7 +148,13 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer {
         player.health = 100f;
         player.stamina = 100f;
         player.adrenaline = 0f;
+        player.score = missionIndex == 1 ? 0 : player.score;
+        player.currency = missionIndex == 1 ? 0 : player.currency;
         player.state = Player.ParkourState.STAND;
+        player.isGrounded = true;
+        player.firstPersonView = false;
+        player.currentHeight = player.standingHeight;
+        lastPlayerHealth = player.health;
 
         // Spawn chasers on different rooftops
         chasers.clear();
@@ -91,252 +162,541 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer {
         chasers.add(new HunterEnemy(35f, 30f, 38f));   // Tower Gamma
         chasers.add(new HunterEnemy(-36f, 22f, 0f));   // Tower Epsilon
         if (missionIndex >= 2) {
-            chasers.add(new HunterEnemy(0f, 28f, 42f)); // Mid-Way Relay
+            chasers.add(new HunterEnemy(0f, 28f, 42f));  // Mid-Way Relay
             chasers.add(new HunterEnemy(65f, 32f, 60f)); // Apex Tower
         }
 
         // Spawn items along parkour lines
         items.clear();
-        // Energy drinks on wall-run approaches
-        items.add(new Item(Item.Type.ENERGY_DRINK, 10f, 21f, 10f));
-        items.add(new Item(Item.Type.ENERGY_DRINK, 34f, 26f, -10f));
-        items.add(new Item(Item.Type.ENERGY_DRINK, -10f, 21f, -10f));
-        // Medkits
-        items.add(new Item(Item.Type.MEDKIT, 35f, 31f, 35f));
-        items.add(new Item(Item.Type.MEDKIT, -36f, 23f, -5f));
-        // Parkour Tokens across balance beams
-        items.add(new Item(Item.Type.PARKOUR_TOKEN, 50f, 31.5f, 49f)); // On steel beam!
-        items.add(new Item(Item.Type.PARKOUR_TOKEN, -2f, 19.5f, -18f)); // On Delta beam!
-        items.add(new Item(Item.Type.PARKOUR_TOKEN, 0f, 23f, 21f));   // On Relay beam!
-        // Data Drives
-        items.add(new Item(Item.Type.DATA_DRIVE, 38f, 27f, -42f));
-        items.add(new Item(Item.Type.DATA_DRIVE, -70f, 25f, 10f));
-
         switch (missionIndex) {
             case 1:
-                missionTitle = "Mission 1: Rooftop Infiltration";
-                missionGoal = "Wall-run across the chasm and reach the Apex Tower extraction helipad!";
+                items.add(new Item(Item.Type.ENERGY_DRINK, 10f, 21f, 10f));
+                items.add(new Item(Item.Type.ENERGY_DRINK, 34f, 26f, -10f));
+                items.add(new Item(Item.Type.MEDKIT, -36f, 23f, -5f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, 50f, 31.5f, 49f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, -2f, 19.5f, -18f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, 0f, 23f, 21f));
                 requiredItems = 0;
                 break;
             case 2:
-                missionTitle = "Mission 2: Scavenger's High-Rise";
-                missionGoal = "Collect 6 survival items across high-altitude balance beams!";
+                items.add(new Item(Item.Type.ENERGY_DRINK, 10f, 21f, 10f));
+                items.add(new Item(Item.Type.MEDKIT, 35f, 31f, 35f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, 50f, 31.5f, 49f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, -2f, 19.5f, -18f));
+                items.add(new Item(Item.Type.PARKOUR_TOKEN, 0f, 23f, 21f));
+                items.add(new Item(Item.Type.ENERGY_DRINK, -36f, 23f, -5f));
+                items.add(new Item(Item.Type.MEDKIT, -76f, 25f, 8f));
+                items.add(new Item(Item.Type.ENERGY_DRINK, 43f, 27f, -42f));
                 requiredItems = 6;
                 break;
-            case 3:
-                missionTitle = "Mission 3: Apex Extraction";
-                missionGoal = "Evade all rooftop stalkers and activate the gold helipad beacon!";
+            default:
+                items.add(new Item(Item.Type.DATA_DRIVE, 34f, 26f, -10f));
+                items.add(new Item(Item.Type.DATA_DRIVE, -2f, 19.5f, -18f));
+                items.add(new Item(Item.Type.DATA_DRIVE, -76f, 25f, 8f));
+                items.add(new Item(Item.Type.ENERGY_DRINK, 10f, 21f, 10f));
+                items.add(new Item(Item.Type.MEDKIT, 35f, 31f, 35f));
                 requiredItems = 3;
                 break;
         }
 
+        switch (missionIndex) {
+            case 1:
+                missionTitle = "Mission 1: Rooftop Infiltration";
+                missionGoal = "Parkour east across the towers and reach the gold helipad beacon.";
+                break;
+            case 2:
+                missionTitle = "Mission 2: Scavenger's High-Rise";
+                missionGoal = "Collect 6 survival items, then reach the Apex helipad.";
+                break;
+            case 3:
+                missionTitle = "Mission 3: Apex Extraction";
+                missionGoal = "Recover 3 data drives, then use the console at the helipad.";
+                break;
+        }
+
         currentState = GameState.PLAYING;
-        audioManager.playMusic("audio/music/bgm_parkour_rush.wav");
+        audioManager.playMusic(missionMusic(missionIndex));
     }
 
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        touchInput.handleTouchEvent(event);
-        return true;
+    private String missionMusic(int mission) {
+        switch (mission) {
+            case 2: return MUSIC_M2;
+            case 3: return MUSIC_M3;
+            default: return MUSIC_M1;
+        }
     }
 
+    // =================================================================
+    // GL lifecycle
+    // =================================================================
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-        gl.glClearColor(0.12f, 0.18f, 0.32f, 1.0f); // Dark atmospheric dusk sky
-        gl.glEnable(GL10.GL_DEPTH_TEST);
-        gl.glDepthFunc(GL10.GL_LEQUAL);
+        worldRenderer = new WorldRenderer(context);
+        worldRenderer.setQuality(settings.graphicsQuality);
         worldRenderer.init();
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
-        gl.glViewport(0, 0, width, height);
-        worldRenderer.updateViewport(width, height);
-        touchInput.updateScreenSize(width, height);
+        if (worldRenderer != null) {
+            worldRenderer.updateViewport(width, height);
+        }
+        if (touchInput == null) {
+            touchInput = new TouchInput();
+            touchInput.sensitivityScale = settings.lookScale();
+            touchInput.invertLookY = settings.invertLookY;
+        } else {
+            touchInput.updateScreenSize(width, height);
+        }
     }
 
     @Override
     public void onDrawFrame(GL10 gl) {
-        long now = System.currentTimeMillis();
-        deltaTime = (now - lastFrameTime) / 1000.0f;
+        long now = System.nanoTime();
+        float dt = (now - lastFrameTime) / 1_000_000_000f;
         lastFrameTime = now;
-        if (deltaTime > 0.1f) deltaTime = 0.1f;
+        if (dt > 0.1f) dt = 0.1f;
+        if (dt <= 0f) dt = 0.016f;
+        deltaTime = dt;
+
+        if (settingsDirty) {
+            settingsDirty = false;
+            applyAudioSettings();
+            applyFrameBudget();
+            if (worldRenderer != null) worldRenderer.setQuality(settings.graphicsQuality);
+            if (touchInput != null) {
+                touchInput.sensitivityScale = settings.lookScale();
+                touchInput.invertLookY = settings.invertLookY;
+            }
+        }
 
         if (currentState == GameState.PLAYING) {
             updateGame(deltaTime);
+        } else if (touchInput != null) {
+            touchInput.resetFrameButtons();
+            touchInput.interactVisible = false;
         }
 
-        // Render 3D World & HUD
-        worldRenderer.render(gl, player, worldMap, chasers, items, touchInput, currentState);
+        if (worldRenderer != null && touchInput != null) {
+            worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
+                    currentState, beaconPulse);
+        }
+
+        // Optional FPS limit (30): block the GL thread past the frame budget
+        if (frameBudgetNs > 0) {
+            long elapsed = System.nanoTime() - now;
+            long remain = frameBudgetNs - elapsed;
+            if (remain > 1_000_000L) {
+                try {
+                    Thread.sleep(remain / 1_000_000L, (int) (remain % 1_000_000L));
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
     }
 
+    // =================================================================
+    // Game update
+    // =================================================================
     private void updateGame(float dt) {
         missionTimer += dt;
+        beaconPulse += dt * 2.0f;
+        if (beaconPulse > 1f) beaconPulse -= 1f;
+        if (toastTimer > 0f) toastTimer -= dt;
 
         // Apply camera swipe rotation
         player.yaw += touchInput.deltaYaw;
         player.pitch = Math.max(-80f, Math.min(80f, player.pitch + touchInput.deltaPitch));
 
-        // Camera view toggle (1st person / 3rd person)
+        if (touchInput.pausePressed) {
+            pauseGame();
+            return;
+        }
         if (touchInput.camTogglePressed) {
             player.firstPersonView = !player.firstPersonView;
         }
 
-        // Update Player Parkour Kinematics
+        // Player physics
         player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
                 touchInput.slidePressed, touchInput.sprintToggled, worldMap.obstacles);
 
-        // Sound Effects Triggers
-        if (player.playJumpSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_JUMP);
-            player.playJumpSfx = false;
+        // Health feedback
+        if (player.health < lastPlayerHealth) {
+            if (ui != null) ui.flashDamage();
+            vibrate(35);
+            regenDelay = 6f;
         }
-        if (player.playDoubleJumpSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_DOUBLE_JUMP);
-            player.playDoubleJumpSfx = false;
-        }
-        if (player.playWallRunSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_WALLRUN);
-            player.playWallRunSfx = false;
-        }
-        if (player.playVaultSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_VAULT);
-            player.playVaultSfx = false;
-        }
-        if (player.playLedgeGrabSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_LEDGE_GRAB);
-            player.playLedgeGrabSfx = false;
-        }
-        if (player.playMantleSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_MANTLE);
-            player.playMantleSfx = false;
-        }
-        if (player.playSlideSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_SLIDE);
-            player.playSlideSfx = false;
-        }
-        if (player.playRollSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_ROLL);
-            player.playRollSfx = false;
-        }
-        if (player.playHardLandSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_HARD_LAND);
-            player.playHardLandSfx = false;
-        }
-        if (player.playFootstepSfx) {
-            audioManager.playSfx(GameAudioManager.SFX_FOOTSTEP);
-            player.playFootstepSfx = false;
+        lastPlayerHealth = player.health;
+        if (player.health > 0 && player.health < player.maxHealth) {
+            if (regenDelay > 0f) regenDelay -= dt;
+            else player.health = Math.min(player.maxHealth, player.health + 6f * dt);
         }
 
-        // Breathing & Heartbeat Audio loops
+        // SFX triggers
+        if (player.playJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_JUMP); player.playJumpSfx = false; }
+        if (player.playDoubleJumpSfx) { audioManager.playSfx(GameAudioManager.SFX_DOUBLE_JUMP); player.playDoubleJumpSfx = false; }
+        if (player.playWallRunSfx) { audioManager.playSfx(GameAudioManager.SFX_WALLRUN); player.playWallRunSfx = false; }
+        if (player.playVaultSfx) { audioManager.playSfx(GameAudioManager.SFX_VAULT); player.playVaultSfx = false; }
+        if (player.playLedgeGrabSfx) { audioManager.playSfx(GameAudioManager.SFX_LEDGE_GRAB); player.playLedgeGrabSfx = false; }
+        if (player.playMantleSfx) { audioManager.playSfx(GameAudioManager.SFX_MANTLE); player.playMantleSfx = false; }
+        if (player.playSlideSfx) { audioManager.playSfx(GameAudioManager.SFX_SLIDE); player.playSlideSfx = false; }
+        if (player.playRollSfx) { audioManager.playSfx(GameAudioManager.SFX_ROLL); player.playRollSfx = false; }
+        if (player.playHardLandSfx) { audioManager.playSfx(GameAudioManager.SFX_HARD_LAND); player.playHardLandSfx = false; }
+        if (player.playFootstepSfx) { audioManager.playSfx(GameAudioManager.SFX_FOOTSTEP); player.playFootstepSfx = false; }
+
+        // Stamina / health breathing & heartbeat loops
         if (player.stamina < 20f && player.isGrounded) {
             audioManager.startHeavyBreathing();
         } else {
             audioManager.stopHeavyBreathing();
         }
-
         if (player.health < 30f) {
             audioManager.startHeartbeat();
         } else {
             audioManager.stopHeartbeat();
         }
 
-        // Update Chasers
-        boolean anyChasing = false;
+        // Chasers
         for (HunterEnemy chaser : chasers) {
-            chaser.update(dt, player, worldMap.obstacles);
+            chaser.update(dt, player, worldMap);
             if (chaser.alertSoundPlayed) {
                 audioManager.playSfx(GameAudioManager.SFX_CHASER_ROAR);
                 chaser.alertSoundPlayed = false;
             }
-            if (chaser.state == HunterEnemy.State.CHASING) {
-                anyChasing = true;
-            }
         }
 
-        // Update Items & Check Collection
+        // Items: auto-collect or interact-collect (data drives)
+        interactTargetItem = null;
+        interactTargetConsole = false;
         for (Item item : items) {
-            if (!item.collected) {
-                item.update(dt);
-                float dx = item.x - player.x;
-                float dy = item.y - player.y;
-                float dz = item.z - player.z;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (dist < 1.8f) {
-                    item.onCollected(player);
-                    itemsCollected++;
-                    switch (item.type) {
-                        case ENERGY_DRINK:
-                            audioManager.playSfx(GameAudioManager.SFX_PICKUP_DRINK);
-                            break;
-                        case MEDKIT:
-                            audioManager.playSfx(GameAudioManager.SFX_PICKUP_MEDKIT);
-                            break;
-                        default:
-                            audioManager.playSfx(GameAudioManager.SFX_PICKUP_TOKEN);
-                            break;
-                    }
+            if (item.collected) continue;
+            item.update(dt);
+            float dx = item.x - player.x;
+            float dy = item.y - player.y;
+            float dz = item.z - player.z;
+            float distSq = dx * dx + dy * dy + dz * dz;
+
+            if (item.type == Item.Type.DATA_DRIVE) {
+                if (distSq < 3.2f * 3.2f) {
+                    if (interactTargetItem == null) interactTargetItem = item;
+                }
+            } else if (distSq < 1.8f * 1.8f) {
+                item.onCollected(player);
+                itemsCollected++;
+                switch (item.type) {
+                    case ENERGY_DRINK: audioManager.playSfx(GameAudioManager.SFX_PICKUP_DRINK); break;
+                    case MEDKIT: audioManager.playSfx(GameAudioManager.SFX_PICKUP_MEDKIT); break;
+                    default: audioManager.playSfx(GameAudioManager.SFX_PICKUP_TOKEN); break;
                 }
             }
         }
 
-        // Check Mission Completion at Extraction Helipad
-        float edx = worldMap.extractionX - player.x;
-        float edz = worldMap.extractionZ - player.z;
-        float distToExtraction = (float) Math.sqrt(edx * edx + edz * edz);
-
-        if (distToExtraction < 5.0f && Math.abs(worldMap.extractionY - player.y) < 3.0f) {
-            if (itemsCollected >= requiredItems) {
-                // Victory!
-                currentState = GameState.MISSION_COMPLETE;
-                audioManager.playSfx(GameAudioManager.SFX_LEVEL_WIN);
-                player.score += 500;
+        // Extraction console proximity (mission 3)
+        boolean consoleNear = false;
+        if (currentMission == 3) {
+            float cdx = 61f - player.x;
+            float cdz = 60f - player.z;
+            if (cdx * cdx + cdz * cdz < 3.0f * 3.0f && Math.abs(32.4f - player.y) < 3f) {
+                consoleNear = true;
+                interactTargetConsole = true;
             }
         }
 
-        // Check Game Over
-        if (player.state == Player.ParkourState.DEAD || player.y < 0f) {
-            currentState = GameState.GAMEOVER;
-            audioManager.playSfx(GameAudioManager.SFX_GAME_OVER);
+        // Interaction prompt
+        if (interactTargetItem != null) {
+            interactPrompt = "INTERACT to collect the data drive";
+        } else if (interactTargetConsole) {
+            if (itemsCollected >= requiredItems) {
+                interactPrompt = beaconActivated ? null : "INTERACT to signal the helicopter";
+            } else {
+                interactPrompt = "Data drives: " + itemsCollected + "/" + requiredItems;
+            }
+        } else {
+            interactPrompt = null;
+        }
+        touchInput.interactVisible = interactTargetItem != null
+                || (interactTargetConsole && itemsCollected >= requiredItems && !beaconActivated);
+
+        // Interact press
+        if (touchInput.interactPressed) {
+            if (interactTargetItem != null) {
+                interactTargetItem.onCollected(player);
+                itemsCollected++;
+                audioManager.playSfx(GameAudioManager.SFX_PICKUP_TOKEN);
+                interactTargetItem = null;
+            } else if (interactTargetConsole) {
+                if (itemsCollected >= requiredItems && !beaconActivated) {
+                    beaconActivated = true;
+                    audioManager.playSfx(GameAudioManager.SFX_LEVEL_WIN);
+                    toastMessage = "EXTRACTION SIGNAL SENT - HOLD THE HELIPAD";
+                    toastTimer = 3.5f;
+                    vibrate(60);
+                } else if (itemsCollected < requiredItems) {
+                    toastMessage = "Need " + (requiredItems - itemsCollected) + " more data drives";
+                    toastTimer = 2.0f;
+                }
+            }
         }
 
-        // Reset per-frame button presses
+        // Extraction / completion rules
+        float edx = worldMap.extractionX - player.x;
+        float edz = worldMap.extractionZ - player.z;
+        float distToExtraction = (float) Math.sqrt(edx * edx + edz * edz);
+        boolean onHelipad = distToExtraction < 5.0f
+                && Math.abs(worldMap.extractionY - player.y) < 3.0f;
+
+        boolean extractionReady;
+        if (currentMission == 3) {
+            extractionReady = onHelipad && beaconActivated;
+        } else {
+            extractionReady = onHelipad && itemsCollected >= requiredItems;
+        }
+        if (extractionReady) {
+            completeMission();
+            return;
+        }
+
+        // Death
+        if (player.state == Player.ParkourState.DEAD || player.y < -2f) {
+            gameOver();
+            return;
+        }
+
+        // HUD updates (dirty-checked)
+        if (ui != null) {
+            ui.setHudMission(missionTitle, missionGoal);
+            String stats = (requiredItems > 0
+                    ? "Items " + itemsCollected + "/" + requiredItems + "   " : "")
+                    + "Score " + player.score;
+            ui.setHudStats(stats);
+            String prompt = toastTimer > 0f ? toastMessage : interactPrompt;
+            if (prompt == null && player.actionNotifyTimer > 0f) {
+                prompt = player.lastParkourAction;
+            }
+            ui.setHudPrompt(prompt);
+        }
+
         touchInput.resetFrameButtons();
     }
 
-    public void onResume() {
-        super.onResume();
-        if (audioManager != null) {
+    // =================================================================
+    // State transitions
+    // =================================================================
+    private void completeMission() {
+        currentState = GameState.MISSION_COMPLETE;
+        audioManager.playSfx(GameAudioManager.SFX_LEVEL_WIN);
+        audioManager.stopHeavyBreathing();
+        audioManager.stopHeartbeat();
+        player.score += 500;
+        if (currentMission > completedMissions) completedMissions = currentMission;
+        if (player.score > saveManager.loadInt("best_score", 0)) {
+            saveManager.saveInt("best_score", player.score);
+        }
+        saveProgress();
+
+        if (ui != null) {
+            if (currentMission >= 3) {
+                finalMissionCompleted = true;
+                ui.setMissionCompleteInfo(
+                        "Extraction complete! You survived the lockdown.",
+                        "Final score  " + player.score,
+                        "Play Again");
+            } else {
+                ui.setMissionCompleteInfo(
+                        missionTitle + " objectives met",
+                        "Score  " + player.score + "   Best  "
+                                + saveManager.loadInt("best_score", 0),
+                        "Next Mission");
+            }
+            ui.showMenu("mission");
+        }
+    }
+
+    private void gameOver() {
+        currentState = GameState.GAMEOVER;
+        audioManager.playSfx(GameAudioManager.SFX_GAME_OVER);
+        audioManager.stopHeavyBreathing();
+        audioManager.stopHeartbeat();
+        if (player.score > saveManager.loadInt("best_score", 0)) {
+            saveManager.saveInt("best_score", player.score);
+        }
+        vibrate(120);
+        if (ui != null) {
+            ui.setGameOverInfo(
+                    "Score  " + player.score + "   Items  " + itemsCollected,
+                    missionTitle);
+            ui.showMenu("gameover");
+        }
+    }
+
+    public void pauseGame() {
+        if (currentState != GameState.PLAYING) return;
+        currentState = GameState.PAUSED;
+        audioManager.pause();
+        saveProgress();
+        if (ui != null) {
+            ui.showMenu("pause");
+            if (ui != null) ui.notifySaved();
+        }
+    }
+
+    public void resumeGame() {
+        if (currentState != GameState.PAUSED) return;
+        currentState = GameState.PLAYING;
+        audioManager.resume();
+        lastFrameTime = System.nanoTime();
+        if (ui != null) ui.showMenu(null);
+    }
+
+    private void showMenuState() {
+        currentState = GameState.MENU;
+        audioManager.stopMusic();
+        audioManager.playMusic(MUSIC_MENU);
+        if (ui != null) ui.showMainMenu();
+    }
+
+    /** Save the current run for Continue. */
+    private void saveProgress() {
+        saveManager.saveInt("current_mission", currentMission);
+        saveManager.saveInt("completed_missions", completedMissions);
+        saveManager.saveInt("score", player.score);
+        saveManager.saveInt("currency", player.currency);
+        saveManager.saveInt("items_collected", itemsCollected);
+        saveManager.saveFloat("player_health", Math.max(1f, player.health));
+        saveManager.saveString("mission_title", missionTitle);
+        saveManager.saveString("mission_goal", missionGoal);
+        saveManager.saveInt("best_score", saveManager.loadInt("best_score", 0));
+    }
+
+    // =================================================================
+    // UIController callbacks (called on the UI thread)
+    // =================================================================
+    @Override public void onStartNewGame() {
+        queue(new Runnable() { public void run() { spawnMissions(currentMission); } });
+    }
+
+    @Override public void onContinueGame() {
+        queue(new Runnable() {
+            public void run() {
+                player.score = saveManager.loadInt("score", 0);
+                player.currency = saveManager.loadInt("currency", 0);
+                completedMissions = saveManager.loadInt("completed_missions", 0);
+                spawnMissions(saveManager.loadInt("current_mission", 1));
+            }
+        });
+    }
+
+    @Override public void onResumeRequested() {
+        queue(new Runnable() { public void run() { resumeGame(); } });
+    }
+
+    @Override public void onRestartMission() {
+        queue(new Runnable() { public void run() { spawnMissions(currentMission); } });
+    }
+
+    @Override public void onQuitToMenu() {
+        queue(new Runnable() {
+            public void run() {
+                saveProgress();
+                showMenuState();
+            }
+        });
+    }
+
+    @Override public void onExitRequested() {
+        // Exit is a UI-thread operation
+        if (context instanceof android.app.Activity) {
+            ((android.app.Activity) context).runOnUiThread(new Runnable() {
+                public void run() {
+                    saveProgress();
+                    audioManager.release();
+                    ((android.app.Activity) context).finishAffinity();
+                }
+            });
+        }
+    }
+
+    @Override public void onSettingsChanged() {
+        settingsDirty = true;
+    }
+
+    @Override public boolean hasSaveGame() {
+        return saveManager.hasSave() || saveManager.loadInt("current_mission", -1) > 0;
+    }
+
+    @Override public int bestScore() {
+        return saveManager.loadInt("best_score", 0);
+    }
+
+    /** Run a runnable on the GL thread (queueEvent) for state changes. */
+    private void queue(Runnable r) {
+        queueEvent(r);
+    }
+
+    // =================================================================
+    // Helpers
+    // =================================================================
+    private void vibrate(int ms) {
+        if (vibrator == null) return;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(ms,
+                        VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                vibrator.vibrate(ms);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // =================================================================
+    // Activity lifecycle passthroughs
+    // =================================================================
+    public void activityPaused() {
+        audioManager.pause();
+        if (currentState == GameState.PLAYING) {
+            saveProgress();
+        }
+    }
+
+    public void activityResumed() {
+        lastFrameTime = System.nanoTime();
+        if (currentState == GameState.PLAYING) {
+            audioManager.resume();
+        } else if (currentState == GameState.MENU && audioManager.musicAvailable()) {
             audioManager.resume();
         }
     }
 
-    public void onPause() {
-        super.onPause();
-        if (audioManager != null) {
-            audioManager.pause();
-        }
-    }
-
     public void destroy() {
-        if (audioManager != null) {
-            audioManager.release();
+        audioManager.release();
+    }
+
+    /**
+     * Back button: pause/resume during play; menu navigation elsewhere.
+     * Returns true when handled.
+     */
+    public boolean onBackPressed() {
+        switch (currentState) {
+            case PLAYING:
+                pauseGame();
+                return true;
+            case PAUSED:
+                resumeGame();
+                if (ui != null) ui.showMenu(null);
+                return true;
+            case MENU:
+                return false; // let the activity exit
+            case GAMEOVER:
+            case MISSION_COMPLETE:
+                return true; // require explicit button choice
+            default:
+                return false;
         }
     }
 
-    public boolean onBackPressed() {
-        if (currentState == GameState.PLAYING) {
-            currentState = GameState.PAUSED;
-            if (audioManager != null) audioManager.pause();
-            return true;
-        } else if (currentState == GameState.PAUSED) {
-            currentState = GameState.PLAYING;
-            if (audioManager != null) audioManager.resume();
-            return true;
-        } else if (currentState == GameState.GAMEOVER || currentState == GameState.MISSION_COMPLETE) {
-            spawnMissions(currentMission == 3 ? 1 : currentMission + 1);
-            return true;
-        }
-        return false;
+    // Mission title used by HUD when a fresh spawn resets things
+    public String currentMissionTitle() {
+        return missionTitle;
     }
 }

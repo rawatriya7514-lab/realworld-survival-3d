@@ -56,7 +56,7 @@ javac -source 8 -target 8 -classpath "$ANDROID_JAR" -d obj src/com/devagent/real
 echo "  Java compilation: OK"
 
 echo "[2/6] Converting to DEX..."
-d8 --release --output dex_out obj/com/devagent/realworldsurvival3d/*.class
+d8 --release --lib "$ANDROID_JAR" --output dex_out obj/com/devagent/realworldsurvival3d/*.class
 echo "  DEX conversion: OK"
 
 echo "[3/6] Compiling resources..."

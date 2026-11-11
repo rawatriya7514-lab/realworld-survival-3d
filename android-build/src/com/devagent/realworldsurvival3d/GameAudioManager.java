@@ -166,6 +166,11 @@ public class GameAudioManager {
         }
     }
 
+    /** True when a music track is currently loaded and playable. */
+    public boolean musicAvailable() {
+        return musicPlayer != null;
+    }
+
     public void setSfxVolume(float vol) {
         this.sfxVolume = vol;
     }

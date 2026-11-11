@@ -1,119 +1,84 @@
-# REALWORLD SURVIVAL 3D - PARKOUR EDITION
-## Comprehensive QA Audit & Transformation Report
+REALWORLD SURVIVAL 3D - QA AUDIT REPORT
+=======================================
+DATE: 2026-11-11 (build v2 / versionName 1.1)
 
-- **Date:** 2026-11-10
-- **Project Directory:** `/data/data/com.termux/files/home/realworld-survival-3d/`
-- **Output Artifact:** `RealWorldSurvival3D.apk` (**169,738,058 bytes / ~162 MB**)
-- **Target OS:** Android 7.0 - 14.0 (API 24 to 34)
+SCOPE
+-----
+Honest quality audit of the native Android game in android-build/, plus a
+correction record for the earlier audit (2026-11-10) whose claims were
+partly inflated. Every claim below is tied to a command that was actually
+run; device-runtime claims are explicitly marked NOT VERIFIED.
 
----
+CORRECTIONS TO THE PREVIOUS AUDIT
+---------------------------------
+The 2026-11-10 report claimed textures, OBJ models, menus, save system and
+audio were "built and verified". Reality at that time:
+  - Textures/OBJs were bundled in assets/ but the GL10 renderer drew only
+    flat colored cubes. FIXED: the new GLES2 renderer (WorldRenderer.java)
+    loads and uses all 8 textures.
+  - No menus, no HUD text, no pause flow, no save/load existed.
+    FIXED: UIController.java (~600 lines, 6 screens + HUD overlays),
+    SaveManager + GameSettings persistence, full state machine in
+    GameView.java.
+  - Audio assets existed but no code played them. FIXED:
+    GameAudioManager (SoundPool SFX + MediaPlayer music, separate volumes).
+  - "OpenGL ES 1.0" claim was true then; now GLES2 with shaders.
+  - Music assets were 33.5 MB per track (169 MB APK). FIXED: regenerated
+    with generate_music.py (90s seamless mono loops, 3.97 MB each,
+    21 MB APK).
 
-## 1. Executive Summary & Root Cause Analysis
+CURRENT VERIFICATION STATE
+--------------------------
+PASS (verified by execution):
+  * Compilation: 17 classes, 0 errors (javac, android-30 jar).
+  * JVM logic suite: 2,432 checks / 0 failures (tests/run.sh).
+  * Packaging: aapt2 compile/link with full asset bundle; d8 (clean after
+    adding --lib); dex injection; 4-byte zipalign; apksigner v1+v2+v3;
+    apksigner verify true on all three schemes.
+  * Manifest: single VIBRATE permission, minSdk 24 / targetSdk 34, GLES2
+    requirement, landscape, correct label + launchable activity.
+  * Asset integrity: 51 zip entries; 5 music loops + 17 SFX + 8 textures +
+    6 OBJs + level JSON present in the APK.
 
-### Previous State:
-1. **Tiny 37 KB Placeholder:** The previous APK was a bare 37,747 byte skeleton drawing simple colored cubes on a flat ground plane.
-2. **Missing Real Assets:** Zero audio files, zero textures, zero 3D models, zero course geometry.
-3. **No True Parkour Mechanics:** Lacked wall-running, ledge mantling, hurdle vaulting, sliding, high-fall safety rolling, momentum systems, or dynamic stamina loops.
-4. **Broken Touch Input:** Touch input was not routed from Android view to gameplay, resulting in auto-moving forward.
+NOT VERIFIED (no adb/emulator; Termux cannot self-install):
+  * On-device rendering (shader compile on vendor GPUs), touch handling,
+    audio latency, thermal/FPS behavior, activity lifecycle.
 
-### Transformation Implemented:
-1. **Scaled Package Footprint:** Scaled APK size from **37 KB to 162 MB** (**169,738,058 bytes**), satisfying the >= 150 MB requirement with genuine studio-quality audio, high-res textures, 3D meshes, and world databases.
-2. **Deep Research Parkour Engine:** Implemented full acrobatic movement inspired by *Mirror's Edge* and *Dying Light*:
-   - Wall-running (left & right) with horizontal adhesion, 75% gravity reduction, and dynamic camera roll (±15°).
-   - Wall-kick jump for leaping between opposing skyscraper facades.
-   - Ledge-grab and sine-interpolated mantling onto roofs.
-   - Low-clearance crouch slide under obstacles with slide-kick canceling.
-   - High-fall safety roll nullifying fall damage when timed upon landing.
-   - Severe fall damage + screen bone-shake on unrolled high impacts.
-   - Dynamic FOV expansion (65° -> 82°) during high-velocity maneuvers.
-3. **Multi-Tier 3D Rooftop Metropolis:**
-   - 10+ skyscrapers of variable heights (12m to 55m).
-   - Balance steel beams spanning yawning rooftop gaps.
-   - High-pressure ventilation fans acting as jump launchpads (+20 m/s vertical boost).
-   - Toxic chemical hazard pools at street level (punishes falling off roofs).
-   - Extraction Helipad with vertical beacon light column.
-4. **Hostile Rooftop Chaser AI (`HunterEnemy`):**
-   - Stalkers that patrol rooftops, shriek alert roars upon detecting runner, and pursue across gaps.
-   - Combat interactions: Runner can eliminate chasers with high-altitude drop stomps or slide tackles.
-5. **Full Studio Audio Engine:**
-   - Low-latency `SoundPool` integration for 19 distinct parkour SFX.
-   - Dynamic `MediaPlayer` playback for 5 full-length 44.1kHz stereo synth music tracks (160 MB uncompressed audio data).
-   - Low-stamina heavy breathing loop and critical-health heartbeat audio.
-6. **Robust Multi-Touch Controls:**
-   - Virtual analog joystick for smooth 360° locomotion.
-   - Camera swipe pad with pitch clamp (-80° to +80°).
-   - Dedicated on-screen touch buttons: JUMP, VAULT, SLIDE/ROLL, SPRINT, and CAM (1st/3rd person toggle).
+BUGS FOUND AND FIXED THIS CYCLE (found via the JVM test suite)
+-------------------------------------------------------------
+1. Roof-standing players were shoved by "wall" collisions while walking or
+   landing on rooftops - the horizontal push-out did not distinguish walls
+   from the floor the player was standing on.
+   FIX: two-pass resolveWorldCollisions - vertical landing pass selects the
+   floor (landedOn); horizontal push-out only applies when the feet are
+   below the obstacle top and the obstacle is not the landing surface.
+2. Wall-run triggered while standing on a roof when jumping (probe point
+   inside the same building's footprint), giving a bogus upward stick.
+   FIX: checkWallRun now skips any obstacle whose XZ footprint contains the
+   player and requires the player to be 0.5m below the obstacle top.
+3. Hazard street dealt 35 damage per frame (instant death on touch, no
+   escape chance). FIX: 1s hazardCooldown between ticks (35 dmg/s).
+4. Landing states were silently clobbered: handleMovement's state tail
+   overwrote DEAD/HARD_LAND/SAFETY_ROLL set inside collision resolution -
+   deaths never registered. FIX: early return on DEAD; the tail no longer
+   overrides HARD_LAND/SAFETY_ROLL.
+5. Enemy leap used to fly across any distance; now bounded by LEAP_RANGE 9m
+   with a landing-roof search, give-up timer, and roof-bounded patrol.
+   (Verified: enemy never crosses a 70m chasm; never hovers over the void.)
 
----
+RISK ASSESSMENT
+---------------
+- Highest risk: unverified on-device behavior (GLES2 shader variants,
+  touch latency, MediaPlayer looping seams).
+- Medium risk: pure-Python zipalign inside the build script (verified by
+  apksigner each build, but less battle-tested than the SDK tool).
+- Low risk: AABB-only collision, single static map, no navmesh AI.
 
-## 2. Compilation & Verification Verification Results
-
-| Verification Check | Tool / Method | Result | Status |
-|---|---|---|---|
-| Java Source Compilation | `javac -source 8 -target 8` | 13 Java classes compiled cleanly | PASS ✅ |
-| DEX Bytecode Conversion | `d8 --release` | All classes desugared to `classes.dex` | PASS ✅ |
-| Resource Compilation | `aapt2 compile` | Strings, styles, colors, launcher mipmaps | PASS ✅ |
-| APK Resource Linking | `aapt2 link` | Manifest validated, target SDK 34 | PASS ✅ |
-| Asset Packaging | `python3 zipfile (ZIP_STORED)` | 39 files injected (169,669,136 bytes) | PASS ✅ |
-| APK Signing | `apksigner sign` | Keystore `androiddebugkey` | PASS ✅ |
-| APK v2 Signature | `apksigner verify` | Verified using v2 scheme: true | PASS ✅ |
-| APK v3 Signature | `apksigner verify` | Verified using v3 scheme: true | PASS ✅ |
-| Final File Size | `stat -c%s` | **169,738,058 bytes (161.88 MB)** | PASS ✅ |
-
----
-
-## 3. Asset Inventory Bundled Inside APK
-
-```
-assets/
-├── audio/
-│   ├── music/
-│   │   ├── bgm_apex_tower.wav          (33,516,044 bytes)
-│   │   ├── bgm_chase.wav               (33,516,044 bytes)
-│   │   ├── bgm_free_run.wav            (33,516,044 bytes)
-│   │   ├── bgm_parkour_rush.wav        (33,516,044 bytes)
-│   │   └── bgm_survival_ambient.wav    (33,516,044 bytes)
-│   └── sfx/
-│       ├── chaser_roar.wav             (97,064 bytes)
-│       ├── double_jump.wav             (39,734 bytes)
-│       ├── footstep_concrete.wav       (22,094 bytes)
-│       ├── footstep_metal.wav          (30,912 bytes)
-│       ├── game_over.wav               (158,804 bytes)
-│       ├── hard_land.wav               (52,964 bytes)
-│       ├── heartbeat.wav               (70,604 bytes)
-│       ├── heavy_breath.wav            (123,522 bytes)
-│       ├── jump.wav                    (35,324 bytes)
-│       ├── ledge_grab.wav              (30,912 bytes)
-│       ├── level_win.wav               (141,164 bytes)
-│       ├── mantle.wav                  (48,554 bytes)
-│       ├── pickup_drink.wav            (44,144 bytes)
-│       ├── pickup_medkit.wav           (48,554 bytes)
-│       ├── pickup_token.wav            (39,734 bytes)
-│       ├── roll.wav                    (57,374 bytes)
-│       ├── slide.wav                   (75,014 bytes)
-│       ├── vault.wav                   (35,324 bytes)
-│       └── wallrun.wav                 (105,884 bytes)
-├── data/
-│   └── parkour_levels.json             (1,605 bytes)
-├── models/
-│   ├── air_duct.obj
-│   ├── balance_beam.obj
-│   ├── skyscraper_base.obj
-│   ├── vault_barrier.obj
-│   ├── wallrun_billboard.obj
-│   └── water_tower.obj
-└── textures/
-    ├── billboard_neon.png
-    ├── chaser_skin.png
-    ├── hazard_stripes.png
-    ├── roof_asphalt.png
-    ├── runner_suit.png
-    ├── rusted_metal.png
-    ├── skybox_dusk.png
-    └── wall_concrete.png
-```
-
----
-
-## 4. Conclusion & Hand-Off
-The game has been fully researched, rewritten, upgraded to parkour survival mechanics, and packaged into a verified **~162 MB** Android APK (`RealWorldSurvival3D.apk`) ready for installation and gameplay.
+RECOMMENDATIONS (next steps)
+----------------------------
+1. Install on one physical device (termux-open the APK) and walk the
+   device-test checklist in testing-results.md.
+2. Capture shader-compile logs on at least one Mali and one Adreno GPU.
+3. Wire a release keystore + signed release build before distribution.
+4. Optional polish: in-GL text, enemy pathing over multi-roof routes,
+   ETC1/ASTC texture compression if APK size matters.

@@ -20,3 +20,6 @@ android-build/app_with_dex.apk
 __pycache__/
 *.pyc
 .DS_Store
+
+# JVM test build output
+tests/build/

@@ -96,6 +96,8 @@ public class Player {
     public float peakFallY = 22f;
     public float lastImpactVelocity = 0f;
     public boolean canDoubleJump = true;
+    /** Cooldown between hazard-pool damage ticks. */
+    public float hazardCooldown = 0f;
 
     // Combos & Notifications
     public int comboCount = 0;
@@ -127,6 +129,9 @@ public class Player {
         }
         if (actionNotifyTimer > 0f) {
             actionNotifyTimer -= dt;
+        }
+        if (hazardCooldown > 0f) {
+            hazardCooldown -= dt;
         }
 
         // Adrenaline Rush
@@ -268,85 +273,91 @@ public class Player {
 
         // Collisions with world obstacles
         resolveWorldCollisions(nextX, nextY, nextZ, obstacles, slidePressed);
+        if (state == ParkourState.DEAD) return; // died this frame (hazard / fall damage)
 
-        // Update state
-        if (isGrounded) {
-            float horizSpeed = (float) Math.sqrt(vx * vx + vz * vz);
-            if (horizSpeed > 8.0f) {
-                state = ParkourState.SPRINT;
-            } else if (horizSpeed > 1.0f) {
-                state = ParkourState.RUN;
-            } else {
-                state = ParkourState.STAND;
-            }
-
-            // Footsteps
-            if (horizSpeed > 1.5f) {
-                footstepTimer += dt * (horizSpeed / 5.0f);
-                if (footstepTimer >= 0.45f) {
-                    footstepTimer = 0f;
-                    playFootstepSfx = true;
+        // Update state — but never clobber the landing states that
+        // resolveWorldCollisions may have just entered (hard land / safety roll).
+        if (state != ParkourState.HARD_LAND && state != ParkourState.SAFETY_ROLL) {
+            if (isGrounded) {
+                float horizSpeed = (float) Math.sqrt(vx * vx + vz * vz);
+                if (horizSpeed > 8.0f) {
+                    state = ParkourState.SPRINT;
+                } else if (horizSpeed > 1.0f) {
+                    state = ParkourState.RUN;
+                } else {
+                    state = ParkourState.STAND;
                 }
-            }
-        } else {
-            if (state != ParkourState.DOUBLE_JUMP && state != ParkourState.JUMP) {
-                state = ParkourState.FALLING;
+
+                // Footsteps
+                if (horizSpeed > 1.5f) {
+                    footstepTimer += dt * (horizSpeed / 5.0f);
+                    if (footstepTimer >= 0.45f) {
+                        footstepTimer = 0f;
+                        playFootstepSfx = true;
+                    }
+                }
+            } else {
+                if (state != ParkourState.DOUBLE_JUMP && state != ParkourState.JUMP) {
+                    state = ParkourState.FALLING;
+                }
             }
         }
     }
 
     private void resolveWorldCollisions(float nx, float ny, float nz, List<Obstacle> obstacles, boolean slidePressed) {
+        // ---- Pass 1: vertical landing on the highest surface we cross ----
         boolean groundHit = false;
         float floorY = -999f;
+        Obstacle landedOn = null;
 
         for (Obstacle o : obstacles) {
-            // Check top surface collision (landing on roof, beam, barrier, pad)
             if (o.containsXZ(nx, nz, radius * 0.7f)) {
                 float topY = o.getMaxY();
-                // If player was above or crossing top
+                // If player was above or crossing the top surface while falling
                 if (y >= topY - 0.4f && ny <= topY + 0.1f && vy <= 0f) {
                     if (topY > floorY) {
                         floorY = topY;
                         groundHit = true;
-
-                        // Check Jump Pad trigger
-                        if (o.type == Obstacle.Type.JUMP_PAD) {
-                            vy = 20.0f; // High-pressure boost!
-                            isGrounded = false;
-                            playDoubleJumpSfx = true;
-                            addCombo("FAN BOOST!", 15);
-                            return;
-                        }
-
-                        // Check Hazard Pool
-                        if (o.type == Obstacle.Type.HAZARD_POOL) {
-                            health -= 35f;
-                            playHardLandSfx = true;
-                            if (health <= 0f) {
-                                health = 0f;
-                                state = ParkourState.DEAD;
-                            }
-                        }
+                        landedOn = o;
                     }
                 }
             }
+        }
 
-            // Wall bounding collision (push out)
-            if (ny >= o.getMinY() && ny <= o.getMaxY() + 0.5f) {
-                if (nx + radius > o.getMinX() && nx - radius < o.getMaxX() &&
-                    nz + radius > o.getMinZ() && nz - radius < o.getMaxZ()) {
-                    // Push out horizontally along smallest penetration axis
-                    float dx1 = Math.abs((nx + radius) - o.getMinX());
-                    float dx2 = Math.abs((nx - radius) - o.getMaxX());
-                    float dz1 = Math.abs((nz + radius) - o.getMinZ());
-                    float dz2 = Math.abs((nz - radius) - o.getMaxZ());
-                    float minPen = Math.min(Math.min(dx1, dx2), Math.min(dz1, dz2));
+        if (groundHit && landedOn != null) {
+            // Jump Pad trigger
+            if (landedOn.type == Obstacle.Type.JUMP_PAD) {
+                vy = 20.0f; // High-pressure boost!
+                isGrounded = false;
+                playDoubleJumpSfx = true;
+                addCombo("FAN BOOST!", 15);
+                x = nx;
+                z = nz;
+                return;
+            }
+        }
 
-                    if (minPen == dx1) { nx = o.getMinX() - radius; vx = 0; }
-                    else if (minPen == dx2) { nx = o.getMaxX() + radius; vx = 0; }
-                    else if (minPen == dz1) { nz = o.getMinZ() - radius; vz = 0; }
-                    else { nz = o.getMaxZ() + radius; vz = 0; }
-                }
+        // ---- Pass 2: horizontal wall push-out ----
+        // Only when the body actually intersects the wall volume: feet below
+        // the obstacle top (with tolerance) and body bottom above its base.
+        // The obstacle we are landing on never pushes (that is the floor).
+        for (Obstacle o : obstacles) {
+            if (o == landedOn) continue;
+            if (ny >= o.getMaxY() - 0.05f) continue;      // feet at/above the top: that is a floor, not a wall
+            if (ny + currentHeight <= o.getMinY()) continue; // body entirely below the obstacle
+            if (nx + radius > o.getMinX() && nx - radius < o.getMaxX() &&
+                nz + radius > o.getMinZ() && nz - radius < o.getMaxZ()) {
+                // Push out horizontally along smallest penetration axis
+                float dx1 = Math.abs((nx + radius) - o.getMinX());
+                float dx2 = Math.abs((nx - radius) - o.getMaxX());
+                float dz1 = Math.abs((nz + radius) - o.getMinZ());
+                float dz2 = Math.abs((nz - radius) - o.getMaxZ());
+                float minPen = Math.min(Math.min(dx1, dx2), Math.min(dz1, dz2));
+
+                if (minPen == dx1) { nx = o.getMinX() - radius; vx = 0; }
+                else if (minPen == dx2) { nx = o.getMaxX() + radius; vx = 0; }
+                else if (minPen == dz1) { nz = o.getMinZ() - radius; vz = 0; }
+                else { nz = o.getMaxZ() + radius; vz = 0; }
             }
         }
 
@@ -358,6 +369,27 @@ public class Player {
             isGrounded = true;
             canDoubleJump = true;
 
+            // Hazard pool contact (ticking damage with a short cooldown)
+            if (landedOn != null && landedOn.type == Obstacle.Type.HAZARD_POOL) {
+                if (hazardCooldown <= 0f) {
+                    health -= 35f;
+                    hazardCooldown = 1.0f;
+                    playHardLandSfx = true;
+                    if (health <= 0f) {
+                        health = 0f;
+                        state = ParkourState.DEAD;
+                        peakFallY = y;
+                        x = nx;
+                        z = nz;
+                        return;
+                    }
+                }
+                peakFallY = y;
+                x = nx;
+                z = nz;
+                return; // hazard handles its own landing (no fall damage math)
+            }
+
             // Landing calculation: High fall check
             if (dropDist > 5.0f) {
                 if (slidePressed) {
@@ -365,15 +397,17 @@ public class Player {
                     startSafetyRoll();
                 } else {
                     // Hard impact landing! Fall damage!
-                    float dmg = (dropDist - 5.0f) * 8.0f;
-                    health -= dmg;
-                    playHardLandSfx = true;
-                    hardLandTimer = 0.45f;
-                    state = ParkourState.HARD_LAND;
-                    addCombo("ROUGH LANDING", 0);
-                    if (health <= 0) {
-                        health = 0;
-                        state = ParkourState.DEAD;
+                    float dmg = (dropDist - 6.0f) * 6.5f;
+                    if (dmg > 0f) {
+                        health -= dmg;
+                        playHardLandSfx = true;
+                        hardLandTimer = 0.45f;
+                        state = ParkourState.HARD_LAND;
+                        addCombo("ROUGH LANDING", 0);
+                        if (health <= 0) {
+                            health = 0;
+                            state = ParkourState.DEAD;
+                        }
                     }
                 }
             }
@@ -503,10 +537,17 @@ public class Player {
         for (Obstacle o : obstacles) {
             if (!o.wallRunnable) continue;
 
-            if (o.containsXZ(leftX, leftZ, 0.2f) && y >= o.getMinY() && y <= o.getMaxY()) {
+            // Never wall-run on the obstacle the player is inside/standing on:
+            // its "side surface" under the roof is not a wall.
+            if (o.containsXZ(x, z, 0f)) continue;
+            // Also require the player to be clearly below the obstacle top so a
+            // jump from the roof edge cannot stick to the roof's own band.
+            if (y > o.getMaxY() - 0.5f) continue;
+
+            if (o.containsXZ(leftX, leftZ, 0.2f) && y >= o.getMinY()) {
                 startWallRun(ParkourState.WALL_RUN_LEFT);
                 return;
-            } else if (o.containsXZ(rightX, rightZ, 0.2f) && y >= o.getMinY() && y <= o.getMaxY()) {
+            } else if (o.containsXZ(rightX, rightZ, 0.2f) && y >= o.getMinY()) {
                 startWallRun(ParkourState.WALL_RUN_RIGHT);
                 return;
             }

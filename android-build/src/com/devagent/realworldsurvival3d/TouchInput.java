@@ -38,6 +38,15 @@ public class TouchInput {
     public boolean slidePressed = false;
     public boolean sprintToggled = false;
     public boolean camTogglePressed = false;
+    public boolean interactPressed = false;
+    public boolean pausePressed = false;
+
+    /** Contextual visibility of the interact button (set by GameView). */
+    public boolean interactVisible = false;
+
+    /** Base look sensitivity, scaled by the player's settings (0.4 - 2.0). */
+    public float sensitivityScale = 1.0f;
+    public boolean invertLookY = false;
 
     // Button Bounding Boxes (Initialized in updateScreenSize)
     public float btnJumpX, btnJumpY, btnJumpRadius;
@@ -45,6 +54,8 @@ public class TouchInput {
     public float btnSlideX, btnSlideY, btnSlideRadius;
     public float btnSprintX, btnSprintY, btnSprintRadius;
     public float btnCamX, btnCamY, btnCamRadius;
+    public float btnInteractX, btnInteractY, btnInteractRadius;
+    public float btnPauseX, btnPauseY, btnPauseRadius;
 
     public void updateScreenSize(float width, float height) {
         this.screenWidth = width;
@@ -76,6 +87,16 @@ public class TouchInput {
         btnCamRadius = btnJumpRadius * 0.65f;
         btnCamX = width - btnCamRadius * 1.8f;
         btnCamY = btnCamRadius * 1.8f;
+
+        // Pause button sits just left of the camera toggle (top-right)
+        btnPauseRadius = btnJumpRadius * 0.55f;
+        btnPauseX = btnCamX - btnCamRadius * 2.4f;
+        btnPauseY = btnCamY;
+
+        // Interact button floats mid-right, above the action cluster
+        btnInteractRadius = btnJumpRadius * 0.9f;
+        btnInteractX = width - btnInteractRadius * 2.0f;
+        btnInteractY = height * 0.46f;
     }
 
     public void handleTouchEvent(MotionEvent event) {
@@ -110,6 +131,14 @@ public class TouchInput {
                     camTogglePressed = true;
                     return;
                 }
+                if (interactVisible && isInsideCircle(px, py, btnInteractX, btnInteractY, btnInteractRadius)) {
+                    interactPressed = true;
+                    return;
+                }
+                if (isInsideCircle(px, py, btnPauseX, btnPauseY, btnPauseRadius)) {
+                    pausePressed = true;
+                    return;
+                }
 
                 // Left side = Joystick
                 if (px < screenWidth * 0.45f && joystickPointerId == -1) {
@@ -141,8 +170,11 @@ public class TouchInput {
                         joystickCurrentY = py;
                         updateJoystickValues();
                     } else if (pId == cameraPointerId) {
-                        deltaYaw += (px - lastCameraX) * sensitivity;
-                        deltaPitch += (py - lastCameraY) * sensitivity;
+                        float yawStep = (px - lastCameraX) * sensitivity * sensitivityScale;
+                        float pitchStep = (py - lastCameraY) * sensitivity * sensitivityScale;
+                        if (invertLookY) pitchStep = -pitchStep;
+                        deltaYaw += yawStep;
+                        deltaPitch += pitchStep;
                         lastCameraX = px;
                         lastCameraY = py;
                     }
@@ -201,6 +233,8 @@ public class TouchInput {
         slidePressed = false;
         sprintToggled = false;
         camTogglePressed = false;
+        interactPressed = false;
+        pausePressed = false;
         deltaYaw = 0f;
         deltaPitch = 0f;
     }
