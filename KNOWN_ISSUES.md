@@ -40,10 +40,13 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 12)
-1. **Performance Profiling & Frustum Culling Audit** — Batch rendering, VBO allocation audit (zero allocations per frame), and 60 FPS budget verification planned for Phase 13.
+## Open issues (Phase 13)
+1. **Final QA & Dual-Mode End-to-End Audit** — Comprehensive cross-system verification covering parkour campaign, 896m open world, vehicle driving, combat, mission progression, inventory, and save/load planned for Phase 14.
 
 ## Resolved during development
+- PHASE 13: Spatial frustum and sphere culling engine (`CullingOptimizer.java`), in-place zero-allocation
+  TRS matrix generation, elimination of per-frame heap matrix allocations in `WorldRenderer.java`,
+  delta-time hitch clamping [1ms, 100ms] and frame budget regulation (60 FPS/30 FPS) in `GameView.java`.
 - PHASE 12: Full versioned game save/load persistence (`SaveState.java`, `SaveFileManager.java`),
   CRC32 checksum validation, atomic staging with `.tmp` and `.bak` rotation, automatic recovery
   from corrupted saves, and full state restoration for Open-World and Parkour campaign modes.

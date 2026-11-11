@@ -147,6 +147,20 @@ public class WorldRenderer {
     public int screenWidth = 800;
     public int screenHeight = 600;
 
+    // Pre-allocated scratch buffers to eliminate per-frame allocations (Phase 13)
+    private final float[] scratchMvp = new float[16];
+    private final float[] scratchModel = new float[16];
+    public final CullingOptimizer cullingOptimizer = new CullingOptimizer();
+
+    public boolean isVisible(float x, float y, float z, float radius) {
+        float camFX = camTX - camX, camFY = camTY - camY, camFZ = camTZ - camZ;
+        boolean vis = CullingOptimizer.isSphereVisible(x, y, z, radius, camX, camY, camZ,
+                camFX, camFY, camFZ, farPlane);
+        if (vis) cullingOptimizer.recordVisible();
+        else cullingOptimizer.recordCulled();
+        return vis;
+    }
+
     private Context context;
     private boolean glReady = false;
 
@@ -590,11 +604,10 @@ public class WorldRenderer {
         GLES20.glUniform1f(wLocAlpha, 1f);
         int pc = OpenWorld.chunkIndex(player.x), pr = OpenWorld.chunkIndex(player.z);
         // Mesh vertices are already in world space: identity model matrix.
-        float[] model = Mat4.trs(0f, 0f, 0f, 0f, 1f, 1f, 1f);
-        float[] mvp = new float[16];
-        Matrix.multiplyMM(mvp, 0, vpMatrix, 0, model, 0);
-        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, mvp, 0);
-        GLES20.glUniformMatrix4fv(wLocModel, 1, false, model, 0);
+        Mat4.identity(scratchModel);
+        Matrix.multiplyMM(scratchMvp, 0, vpMatrix, 0, scratchModel, 0);
+        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, scratchMvp, 0);
+        GLES20.glUniformMatrix4fv(wLocModel, 1, false, scratchModel, 0);
         float camFX = camTX - camX, camFY = camTY - camY, camFZ = camTZ - camZ;
         for (int dc = -1; dc <= 1; dc++) {
             for (int dr = -1; dr <= 1; dr++) {
@@ -717,15 +730,9 @@ public class WorldRenderer {
             worldObstacles = worldMap.obstacles;
         }
         if (worldObstacles != null) {
-            float camFX = camTX - camX, camFY = camTY - camY, camFZ = camTZ - camZ;
             for (Obstacle o : worldObstacles) {
-                // Cheap behind-camera cull
-                float dx = o.x - camX, dy = o.y - camY, dz = o.z - camZ;
                 float radius = (o.width + o.height + o.depth) * 0.5f;
-                if (dx * camFX + dy * camFY + dz * camFZ < -radius) continue;
-                float distSq = dx * dx + dy * dy + dz * dz;
-                float cull = (farPlane + radius * 2f);
-                if (distSq > cull * cull) continue;
+                if (!isVisible(o.x, o.y, o.z, radius)) continue;
                 drawObstacle(o);
             }
         }
@@ -760,7 +767,7 @@ public class WorldRenderer {
         // Items
         if (items != null) {
             for (Item item : items) {
-                if (item.collected) continue;
+                if (item.collected || !isVisible(item.x, item.y, item.z, 2.0f)) continue;
                 drawItem(item);
             }
         }
@@ -768,20 +775,19 @@ public class WorldRenderer {
         // Characters
         if (chasers != null) {
             for (HunterEnemy ch : chasers) {
-                if (ch.state != HunterEnemy.State.DEFEATED) {
-                    float face = (ch.vx != 0f || ch.vz != 0f)
-                            ? (float) Math.toDegrees(Math.atan2(ch.vx, -ch.vz)) : 0f;
-                    if (ch.animator != null && ch.animator.currentPose != null) {
-                        drawAnimatedCharacter(ch.x, ch.y, ch.z, face, ch.animator.currentPose,
-                                TEX_CHASER, 0.85f, 0.25f, 0.25f);
-                    } else {
-                        drawCharacter(ch.x, ch.y, ch.z, face, 0.8f, 1.7f, 0.8f, TEX_CHASER,
-                                0.85f, 0.3f, 0.3f);
-                    }
-                    // glowing visor
-                    drawCube(ch.x, ch.y + 1.35f, ch.z, face, 0.34f, 0.12f, 0.2f, TEX_NEON,
-                            1f, 0.15f, 0.05f, 1f, 1f, 1f, 0.5f, 1f);
+                if (ch.state == HunterEnemy.State.DEFEATED || !isVisible(ch.x, ch.y, ch.z, 2.5f)) continue;
+                float face = (ch.vx != 0f || ch.vz != 0f)
+                        ? (float) Math.toDegrees(Math.atan2(ch.vx, -ch.vz)) : 0f;
+                if (ch.animator != null && ch.animator.currentPose != null) {
+                    drawAnimatedCharacter(ch.x, ch.y, ch.z, face, ch.animator.currentPose,
+                            TEX_CHASER, 0.85f, 0.25f, 0.25f);
+                } else {
+                    drawCharacter(ch.x, ch.y, ch.z, face, 0.8f, 1.7f, 0.8f, TEX_CHASER,
+                            0.85f, 0.3f, 0.3f);
                 }
+                // glowing visor
+                drawCube(ch.x, ch.y + 1.35f, ch.z, face, 0.34f, 0.12f, 0.2f, TEX_NEON,
+                        1f, 0.15f, 0.05f, 1f, 1f, 1f, 0.5f, 1f);
             }
         }
 
@@ -789,7 +795,7 @@ public class WorldRenderer {
         if (openWorld != null) {
             if (openWorld.civilians != null) {
                 for (CivilianNPC npc : openWorld.civilians) {
-                    if (npc.wasFrozen) continue;
+                    if (npc.wasFrozen || !isVisible(npc.x, npc.y, npc.z, 2.5f)) continue;
                     float tr = 0.35f, tg = 0.65f, tb = 0.85f;
                     if ("Maya".equals(npc.name)) { tr = 0.25f; tg = 0.70f; tb = 0.90f; }
                     else if ("Goran".equals(npc.name)) { tr = 0.85f; tg = 0.55f; tb = 0.20f; }
@@ -809,7 +815,7 @@ public class WorldRenderer {
             }
             if (openWorld.hostiles != null) {
                 for (HostileAI h : openWorld.hostiles) {
-                    if (h.wasFrozen || h.state == HostileAI.State.DEFEATED) continue;
+                    if (h.wasFrozen || h.state == HostileAI.State.DEFEATED || !isVisible(h.x, h.y, h.z, 2.5f)) continue;
                     if (h.animator != null && h.animator.currentPose != null) {
                         drawAnimatedCharacter(h.x, h.y, h.z, h.yaw,
                                 h.animator.currentPose, TEX_CHASER, 0.80f, 0.15f, 0.15f);
@@ -824,6 +830,7 @@ public class WorldRenderer {
             }
             if (openWorld.vehicles != null) {
                 for (Vehicle v : openWorld.vehicles) {
+                    if (!isVisible(v.x, v.y, v.z, 5.0f)) continue;
                     drawVehicle(v);
                 }
             }
@@ -1076,16 +1083,15 @@ public class WorldRenderer {
 
     private void drawBoxNoTex(Obstacle o, float r, float g, float b,
                               float alpha, float spec) {
-        float[] model = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
-        drawCubeModelNoTex(model, r, g, b, alpha, spec);
+        Mat4.setTRS(scratchModel, o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
+        drawCubeModelNoTex(scratchModel, r, g, b, alpha, spec);
     }
 
     /** Cube drawn with the world shader but sampling disabled (plain tint). */
     private void drawCubeModelNoTex(float[] model, float r, float g, float b,
                                     float alpha, float spec) {
-        float[] mvp = new float[16];
-        Matrix.multiplyMM(mvp, 0, vpMatrix, 0, model, 0);
-        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, mvp, 0);
+        Matrix.multiplyMM(scratchMvp, 0, vpMatrix, 0, model, 0);
+        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, scratchMvp, 0);
         GLES20.glUniformMatrix4fv(wLocModel, 1, false, model, 0);
         GLES20.glUniform2f(wLocUVScale, 1f, 1f);
         GLES20.glUniform4f(wLocTint, r, g, b, 1f);
@@ -1256,15 +1262,14 @@ public class WorldRenderer {
                           float sx, float sy, float sz, int tex,
                           float r, float g, float b, float tintA,
                           float uvx, float uvy, float spec, float alpha) {
-        float[] model = Mat4.trs(x, y, z, rotDeg, sx, sy, sz);
-        drawCubeModel(model, tex, r, g, b, tintA, uvx, uvy, spec, alpha);
+        Mat4.setTRS(scratchModel, x, y, z, rotDeg, sx, sy, sz);
+        drawCubeModel(scratchModel, tex, r, g, b, tintA, uvx, uvy, spec, alpha);
     }
 
     private void drawCubeModel(float[] model, int tex, float r, float g, float b, float a,
                                float uvx, float uvy, float spec, float alpha) {
-        float[] mvp = new float[16];
-        Matrix.multiplyMM(mvp, 0, vpMatrix, 0, model, 0);
-        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, mvp, 0);
+        Matrix.multiplyMM(scratchMvp, 0, vpMatrix, 0, model, 0);
+        GLES20.glUniformMatrix4fv(wLocMVP, 1, false, scratchMvp, 0);
         GLES20.glUniformMatrix4fv(wLocModel, 1, false, model, 0);
         GLES20.glUniform2f(wLocUVScale, uvx, uvy);
         GLES20.glUniform4f(wLocTint, r, g, b, a);

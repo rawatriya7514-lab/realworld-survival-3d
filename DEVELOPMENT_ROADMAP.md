@@ -577,7 +577,49 @@ Test results (real, this session):
 Known phase-12 limitations (tracked, see KNOWN_ISSUES.md):
 - Performance profiling and render batching verification planned for Phase 13.
 
-### PHASE 13 — Optimization — PLANNED
-- Render batching, frustum culling verification, allocation budget, 60 FPS profile.
-### PHASE 14 — Final QA — PLANNED
-### PHASE 15 — APK release — PLANNED
+### PHASE 13 — Optimization & performance pass (2026-11-11) — DONE
+Scope: Zero-allocation per-frame matrix engine (`CullingOptimizer.java`), spatial sphere and AABB
+frustum culling, behind-the-camera culling, FOV cone cutoff, draw-distance scaling per graphics
+quality preset (Low 160m, Med 260m, High 420m), zero heap-allocation rendering path in `WorldRenderer.java`,
+elimination of per-frame `new float[16]` allocations in hot paths, delta-time clamping [1ms, 100ms]
+to prevent physics glitch tunneling, and frame budget regulation (60 FPS = 16.66ms, 30 FPS = 33.33ms)
+in `GameView.java`.
+
+What was built (all original code):
+- `CullingOptimizer.java` (new, pure Java): spatial culling engine with sphere-frustum culling,
+  AABB bounding box culling, behind-the-camera dot product rejection, FOV cone angle culling;
+  performance metrics tracking (`visibleCount`, `culledCount`, `cullRatio`); delta time clamping
+  (`clampDeltaTime` within [0.001f, 0.100f]); frame budget calculation (`computeFrameBudgetNs`);
+  pure Java analytical in-place matrix construction `setTRS(out, tx, ty, tz, yaw, sx, sy, sz)`
+  eliminating 5 matrix array allocations per draw call.
+- `Mat4.java` updates: `setTRS` delegates directly to `CullingOptimizer.setTRS` for pure in-place
+  zero-allocation transformation.
+- `WorldRenderer.java` updates: added reusable pre-allocated scratch matrices (`scratchMvp`,
+  `scratchModel`, `scratchTmp`, `scratchPoseMatrix`); integrated `isVisible(x, y, z, radius)`
+  culling checks across all dynamic world objects (obstacles, items, chasers, civilian NPCs,
+  hostile stalkers, and vehicles); replaced all dynamic `new float[16]` heap allocations in the
+  render loop with zero-allocation in-place matrix calculations.
+- `GameView.java` updates: applied `CullingOptimizer.clampDeltaTime` to loop updates, preventing
+  large frame hitch physics explosions; integrated target frame budget regulation (`computeFrameBudgetNs`)
+  synchronizing with `targetFps` settings.
+- Tests: `tests/OptimizationTest.java` (7 groups, 36 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**, InventoryVehicleTest
+  **51 passed / 0 failed**, AudioSettingsTest **142 passed / 0 failed**, SaveLoadTest
+  **87 passed / 0 failed**, OptimizationTest **36 passed / 0 failed**.
+  Total: **3,233 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 39 classes).
+- APK: built, 22,458,892 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 3233/0.
+
+Known phase-13 limitations (tracked, see KNOWN_ISSUES.md):
+- Final comprehensive dual-mode regression test suite planned for Phase 14.
+
+### PHASE 14 — Final QA & dual-mode verification — IN PROGRESS
+### PHASE 15 — Release APK delivery — PLANNED

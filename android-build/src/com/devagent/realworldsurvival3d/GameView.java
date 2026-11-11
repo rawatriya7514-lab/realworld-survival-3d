@@ -151,8 +151,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     }
 
     private void applyFrameBudget() {
-        frameBudgetNs = settings.fpsLimit == GameSettings.FPS_30
-                ? 33_000_000L : 0L;
+        frameBudgetNs = CullingOptimizer.computeFrameBudgetNs(settings.fpsLimit);
     }
 
     // =================================================================
@@ -605,11 +604,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     @Override
     public void onDrawFrame(GL10 gl) {
         long now = System.nanoTime();
-        float dt = (now - lastFrameTime) / 1_000_000_000f;
+        float rawDt = (now - lastFrameTime) / 1_000_000_000f;
         lastFrameTime = now;
-        if (dt > 0.1f) dt = 0.1f;
-        if (dt <= 0f) dt = 0.016f;
-        deltaTime = dt;
+        deltaTime = CullingOptimizer.clampDeltaTime(rawDt, 0.001f, 0.100f);
 
         if (settingsDirty) {
             settingsDirty = false;

@@ -623,3 +623,51 @@ SaveLoadTest groups (87 checks):
 Defects found & fixed during this phase (real, encountered while testing):
 1. Duplicate definitions of `getDataSlates()` and `getMissions()` in `MissionManager.java` prevented compilation → eliminated redundant duplicate definitions.
 2. Added `Inventory.clear()` method to enable wiping initial loadout when restoring custom saved slot loadout.
+
+## Phase 13 — Optimization & Performance Pass (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager,
+  Inventory, Vehicle, AudioMixer, SettingsConfig, SaveState, SaveFileManager,
+  CullingOptimizer + 15 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Inventory & Vehicles JVM suite (`InventoryVehicleTest`) | **PASS** — 51 checks, 0 failures | Stacking, consumables, vehicle physics, roadkill ramming |
+| Audio & Settings JVM suite (`AudioSettingsTest`) | **PASS** — 142 checks, 0 failures | Mixing, dB conversions, 3D spatial pan, engine pitch, config |
+| Save/Load Persistence JVM suite (`SaveLoadTest`) | **PASS** — 87 checks, 0 failures | CRC32 verification, atomic writes, backup recovery, full state |
+| Optimization & Culling JVM suite (`OptimizationTest`) | **PASS** — 36 checks, 0 failures | Frustum culling, zero-alloc TRS, frame budget, dt clamp |
+| Total JVM test suite | **PASS** — 3,233 checks, 0 failures | Zero regressions across all 15 test suites |
+| Full Android compile (all 39 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,458,892 bytes | step [6/6] + apksigner output |
+| On-device runtime (frame rate, memory footprint) | **NOT TESTED** | No adb in environment; physical install pending |
+
+OptimizationTest groups (36 checks):
+1. **CullingOptimizer sphere culling**: Objects ahead of camera within draw distance are visible; objects behind camera plane are culled; objects beyond max draw distance culled; objects intersecting far boundary visible; extreme off-axis objects culled by FOV cone.
+2. **CullingOptimizer AABB culling**: Visible AABB 40m ahead; AABB behind camera culled; AABB beyond max draw distance culled.
+3. **CullingOptimizer performance metrics**: Tracking visible objects, culled objects, and cull ratio percentage; clean metric resets.
+4. **CullingOptimizer zero-allocation setTRS verification**: Verified mathematical correctness of in-place matrix elements ($m_0 = \cos \cdot sx$, $m_2 = -\sin \cdot sx$, $m_5 = sy$, $m_8 = \sin \cdot sz$, $m_{10} = \cos \cdot sz$, translations $m_{12}, m_{13}, m_{14}$, identity $m_{15} = 1.0$, all off-diagonals 0).
+5. **CullingOptimizer frame budget & delta time clamping**: Clamping 450ms hitch to 100ms max; clamping negative or zero dt to 1ms min; budget computation for 60 FPS (16.66ms) and 30 FPS (33.33ms).
+6. **OpenWorld active chunk streaming budget**: Verification that out-of-range chunks (>250m) are culled from active 3x3 window.
+7. **CullingOptimizer draw distance preset scaling**: Presets correctly scale cull boundaries between Low (160m) and High (420m).
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Sign error in `CullingOptimizer.java` FOV cone test (`cosAngle < -0.173f` instead of `+0.173f`) caused extreme off-axis spheres to fail culling → corrected to `+0.173f` (positive cosine for 80-degree half-angle).
+2. `Mat4.java` imports `android.opengl.Matrix` which cannot be loaded in pure JVM test runner without `android.jar` → moved pure math `setTRS` into `CullingOptimizer.java` and delegated from `Mat4.java`.
+3. In `WorldRenderer.java`, pre-allocated reusable scratch arrays (`scratchMvp`, `scratchModel`, `scratchTmp`, `scratchPoseMatrix`) to eliminate all `new float[16]` heap churn in the render loop.

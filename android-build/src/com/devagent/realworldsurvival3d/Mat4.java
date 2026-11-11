@@ -85,12 +85,17 @@ public final class Mat4 {
         return m;
     }
 
-    /** Build model = T * R * S in one call. */
+    /** In-place zero-allocation construction of model = T * R(Y) * S directly into out[16]. */
+    public static void setTRS(float[] out, float tx, float ty, float tz, float rotDeg,
+                              float sx, float sy, float sz) {
+        CullingOptimizer.setTRS(out, tx, ty, tz, rotDeg, sx, sy, sz);
+    }
+
+    /** Build model = T * R * S in one call (allocates new float[16]). */
     public static float[] trs(float tx, float ty, float tz, float rotDeg,
                               float sx, float sy, float sz) {
-        float[] m = translate(tx, ty, tz);
-        if (rotDeg != 0f) mul(m, rotY(rotDeg));
-        mul(m, scale(sx, sy, sz));
+        float[] m = new float[16];
+        setTRS(m, tx, ty, tz, rotDeg, sx, sy, sz);
         return m;
     }
 
