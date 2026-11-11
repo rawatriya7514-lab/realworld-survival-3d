@@ -18,8 +18,11 @@ import java.util.List;
 public class Player {
     public enum ParkourState {
         STAND,
+        WALK,
+        JOG,
         RUN,
         SPRINT,
+        CROUCH,
         JUMP,
         DOUBLE_JUMP,
         WALL_RUN_LEFT,
@@ -30,6 +33,7 @@ public class Player {
         SLIDING,
         SAFETY_ROLL,
         FALLING,
+        LAND,
         HARD_LAND,
         DEAD
     }
@@ -60,17 +64,25 @@ public class Player {
     public int currency = 0;
 
     // Movement Speeds (m/s)
-    public float walkSpeed = 5.0f;
+    public float walkSpeed = 3.5f;
+    public float jogSpeed = 5.5f;
     public float runSpeed = 7.5f;
     public float sprintSpeed = 12.0f;
+    public float crouchSpeed = 2.5f;
     public float wallRunSpeed = 12.5f;
     public float jumpImpulse = 9.0f;
     public float gravity = -22.0f;
+
+    // Movement & Collision Constants
+    public static final float MAX_STEP_UP = 0.55f;
+    public static final float MAX_STEP_DOWN = 0.55f;
+    public static final float MAX_WALKABLE_SLOPE_COS = 0.60f; // ~53 degrees
 
     // State Tracking
     public ParkourState state = ParkourState.STAND;
     public boolean isGrounded = false;
     public boolean isSprinting = false;
+    public boolean isCrouching = false;
     public boolean firstPersonView = false;
     public boolean adrenalineRush = false;
 
@@ -91,6 +103,8 @@ public class Player {
     public float rollTimer = 0f;
     public float rollDuration = 0.50f;
     public float hardLandTimer = 0f;
+    public float landTimer = 0f;
+    public float landDuration = 0.12f;
 
     // Fall Tracking
     public float peakFallY = 22f;
@@ -128,6 +142,12 @@ public class Player {
 
     public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
                        boolean slidePressed, boolean sprintToggled, List<Obstacle> obstacles) {
+        update(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, false, obstacles);
+    }
+
+    public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
+                       boolean slidePressed, boolean sprintToggled, boolean crouchPressed,
+                       List<Obstacle> obstacles) {
         if (state == ParkourState.DEAD) return;
 
         // Combo decay
@@ -180,14 +200,19 @@ public class Player {
                 updateVaulting(dt);
                 return;
             case SLIDING:
-                updateSliding(dt, jumpPressed);
+                updateSliding(dt, jumpPressed, obstacles);
                 return;
             case SAFETY_ROLL:
-                updateSafetyRoll(dt);
+                updateSafetyRoll(dt, obstacles);
                 return;
             case HARD_LAND:
                 updateHardLand(dt);
                 return;
+            case LAND:
+                if (!updateLand(dt, moveInputX, moveInputY)) {
+                    return;
+                }
+                break;
             case WALL_RUN_LEFT:
             case WALL_RUN_RIGHT:
                 updateWallRunning(dt, jumpPressed, obstacles);
@@ -197,21 +222,95 @@ public class Player {
         }
 
         // Normal Ground & Air locomotion
-        handleMovement(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, obstacles);
+        handleMovement(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, crouchPressed, obstacles);
+    }
+
+    public boolean canStandUp(List<Obstacle> obstacles) {
+        if (obstacles == null) return true;
+        float headTargetY = y + standingHeight;
+        for (Obstacle o : obstacles) {
+            if (!o.solid) continue;
+            if (o.containsXZ(x, z, radius)) {
+                if (o.getMinY() < headTargetY && o.getMaxY() > y + crouchingHeight) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean canStepUp(float targetY, float nx, float nz, List<Obstacle> obstacles) {
+        if (obstacles == null) return true;
+        float targetHeadY = targetY + currentHeight;
+        for (Obstacle o : obstacles) {
+            if (!o.solid) continue;
+            if (o.containsXZ(nx, nz, radius)) {
+                if (o.getMinY() < targetHeadY && o.getMaxY() > targetY + 0.05f) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public void setCrouching(boolean crouch, List<Obstacle> obstacles) {
+        if (!crouch) {
+            if (canStandUp(obstacles)) {
+                isCrouching = false;
+                currentHeight = standingHeight;
+            }
+        } else {
+            isCrouching = true;
+            currentHeight = crouchingHeight;
+            isSprinting = false;
+        }
+    }
+
+    private boolean updateLand(float dt, float inputX, float inputY) {
+        landTimer -= dt;
+        if (landTimer <= 0f || Math.abs(inputX) > 0.1f || Math.abs(inputY) > 0.1f) {
+            state = ParkourState.STAND;
+            return true;
+        }
+        return false;
     }
 
     private void handleMovement(float dt, float inputX, float inputY, boolean jumpPressed,
-                                boolean slidePressed, boolean sprintToggled, List<Obstacle> obstacles) {
-        if (sprintToggled && stamina > 15f) {
+                                boolean slidePressed, boolean sprintToggled, boolean crouchPressed,
+                                List<Obstacle> obstacles) {
+        if (sprintToggled && stamina > 15f && !isCrouching) {
             isSprinting = !isSprinting;
         }
 
-        float speed = walkSpeed;
-        if (isSprinting && stamina > 0f) {
+        // Crouch trigger: explicit crouchPressed, or slidePressed when grounded and not sprinting
+        if (crouchPressed || (slidePressed && !isSprinting && isGrounded)) {
+            if (isCrouching) {
+                if (canStandUp(obstacles)) {
+                    isCrouching = false;
+                    currentHeight = standingHeight;
+                }
+            } else {
+                isCrouching = true;
+                currentHeight = crouchingHeight;
+                isSprinting = false;
+            }
+        } else if (isCrouching && !canStandUp(obstacles)) {
+            currentHeight = crouchingHeight;
+        }
+
+        float inputMag = (float) Math.sqrt(inputX * inputX + inputY * inputY);
+        float speed = 0f;
+        if (isCrouching) {
+            speed = crouchSpeed;
+        } else if (isSprinting && stamina > 0f) {
             speed = sprintSpeed;
             if (adrenalineRush) speed *= 1.25f;
-        } else if (inputX != 0 || inputY != 0) {
+        } else if (inputMag > 0.75f) {
             speed = runSpeed;
+        } else if (inputMag > 0.35f) {
+            speed = jogSpeed;
+        } else if (inputMag > 0.05f) {
+            speed = walkSpeed;
         }
 
         // Direction from yaw
@@ -221,8 +320,14 @@ public class Player {
         float rightX = (float) Math.cos(radYaw);
         float rightZ = (float) Math.sin(radYaw);
 
-        float targetVx = (forwardX * -inputY + rightX * inputX) * speed;
-        float targetVz = (forwardZ * -inputY + rightZ * inputX) * speed;
+        float targetVx = 0f;
+        float targetVz = 0f;
+        if (inputMag > 0.001f && speed > 0f) {
+            float dirX = (forwardX * -inputY + rightX * inputX) / inputMag;
+            float dirZ = (forwardZ * -inputY + rightZ * inputX) / inputMag;
+            targetVx = dirX * speed;
+            targetVz = dirZ * speed;
+        }
 
         // Wading through water halves ground speed (open world only)
         if (terrain != null) {
@@ -237,7 +342,7 @@ public class Player {
         vx += (targetVx - vx) * Math.min(1.0f, dt * accel);
         vz += (targetVz - vz) * Math.min(1.0f, dt * accel);
 
-        // Slide trigger
+        // Slide trigger (only when sprinting and grounded)
         if (isGrounded && isSprinting && slidePressed && (inputX != 0 || inputY != 0)) {
             startSlide();
             return;
@@ -246,22 +351,28 @@ public class Player {
         // Jump trigger
         if (jumpPressed) {
             if (isGrounded) {
-                // Check if approaching a vault barrier
-                Obstacle vaultTarget = checkVaultBarrierAhead(obstacles, forwardX, forwardZ);
-                if (vaultTarget != null && isSprinting) {
-                    startVault(vaultTarget);
-                    return;
-                }
+                if (isCrouching && !canStandUp(obstacles)) {
+                    // Headroom blocked by ceiling, cannot jump
+                } else {
+                    if (isCrouching) {
+                        isCrouching = false;
+                        currentHeight = standingHeight;
+                    }
+                    Obstacle vaultTarget = checkVaultBarrierAhead(obstacles, forwardX, forwardZ);
+                    if (vaultTarget != null && isSprinting) {
+                        startVault(vaultTarget);
+                        return;
+                    }
 
-                vy = jumpImpulse;
-                isGrounded = false;
-                canDoubleJump = true;
-                state = ParkourState.JUMP;
-                peakFallY = y;
-                playJumpSfx = true;
-                addCombo("HIGH LEAP", 5);
+                    vy = jumpImpulse;
+                    isGrounded = false;
+                    canDoubleJump = true;
+                    state = ParkourState.JUMP;
+                    peakFallY = y;
+                    playJumpSfx = true;
+                    addCombo("HIGH LEAP", 5);
+                }
             } else if (canDoubleJump) {
-                // Air boost / double jump
                 vy = jumpImpulse * 0.9f;
                 canDoubleJump = false;
                 state = ParkourState.DOUBLE_JUMP;
@@ -276,11 +387,37 @@ public class Player {
             if (vy < -35f) vy = -35f; // Terminal velocity
             if (y > peakFallY) peakFallY = y;
 
-            // Check for Wall Run if falling or mid-air
             checkWallRun(obstacles, forwardX, forwardZ, rightX, rightZ);
-
-            // Check for Ledge Grab / Mantle
             checkLedgeGrab(obstacles, forwardX, forwardZ);
+        }
+
+        // Slope handling on terrain
+        if (terrain != null) {
+            float[] normal = new float[3];
+            Terrain.normalAt(x, z, normal);
+            float normalY = normal[1];
+            float hSpeed = (float) Math.sqrt(vx * vx + vz * vz);
+
+            if (normalY < MAX_WALKABLE_SLOPE_COS) {
+                // Steep slope / cliff: deflect velocity along slope tangent
+                float dot = vx * normal[0] + vz * normal[2];
+                if (dot < 0f) {
+                    vx -= dot * normal[0];
+                    vz -= dot * normal[2];
+                }
+                // Slide down along horizontal slope normal
+                float slideAcc = (1.0f - normalY) * 12.0f;
+                vx += normal[0] * slideAcc * dt;
+                vz += normal[2] * slideAcc * dt;
+            } else if (hSpeed > 0.1f) {
+                // Walkable slope: mild uphill resistance
+                float dot = (vx * normal[0] + vz * normal[2]) / hSpeed;
+                if (dot < 0f) {
+                    float uphillFactor = 1.0f - 0.25f * (-dot);
+                    vx *= uphillFactor;
+                    vz *= uphillFactor;
+                }
+            }
         }
 
         // Integrate position
@@ -288,25 +425,30 @@ public class Player {
         float nextY = y + vy * dt;
         float nextZ = z + vz * dt;
 
-        // Collisions with world obstacles
+        // Collisions with world obstacles & terrain
         resolveWorldCollisions(nextX, nextY, nextZ, obstacles, slidePressed);
-        if (state == ParkourState.DEAD) return; // died this frame (hazard / fall damage)
+        if (state == ParkourState.DEAD) return;
 
-        // Update state — but never clobber the landing states that
-        // resolveWorldCollisions may have just entered (hard land / safety roll).
-        if (state != ParkourState.HARD_LAND && state != ParkourState.SAFETY_ROLL) {
+        // Update state — but never clobber landing states
+        if (state != ParkourState.HARD_LAND && state != ParkourState.SAFETY_ROLL && state != ParkourState.LAND) {
             if (isGrounded) {
                 float horizSpeed = (float) Math.sqrt(vx * vx + vz * vz);
-                if (horizSpeed > 8.0f) {
+                if (isCrouching) {
+                    state = ParkourState.CROUCH;
+                } else if (horizSpeed > 8.5f || (isSprinting && horizSpeed > 5.5f)) {
                     state = ParkourState.SPRINT;
-                } else if (horizSpeed > 1.0f) {
+                } else if (horizSpeed > 6.0f) {
                     state = ParkourState.RUN;
+                } else if (horizSpeed > 3.8f) {
+                    state = ParkourState.JOG;
+                } else if (horizSpeed > 0.2f) {
+                    state = ParkourState.WALK;
                 } else {
                     state = ParkourState.STAND;
                 }
 
-                // Footsteps
-                if (horizSpeed > 1.5f) {
+                // Footsteps (silent when crouching)
+                if (horizSpeed > 1.5f && !isCrouching) {
                     footstepTimer += dt * (horizSpeed / 5.0f);
                     if (footstepTimer >= 0.45f) {
                         footstepTimer = 0f;
@@ -314,7 +456,10 @@ public class Player {
                     }
                 }
             } else {
-                if (state != ParkourState.DOUBLE_JUMP && state != ParkourState.JUMP) {
+                if (state != ParkourState.DOUBLE_JUMP && state != ParkourState.JUMP
+                        && state != ParkourState.WALL_RUN_LEFT && state != ParkourState.WALL_RUN_RIGHT) {
+                    state = ParkourState.FALLING;
+                } else if (vy < 0f) {
                     state = ParkourState.FALLING;
                 }
             }
@@ -323,10 +468,6 @@ public class Player {
 
     private void resolveWorldCollisions(float nx, float ny, float nz, List<Obstacle> obstacles, boolean slidePressed) {
         // ---- Open world: block horizontal movement into deeper water ----
-        // Strictly-deeper steps are walls (no creep); equal depth (flat
-        // channel bottoms) and shallower moves stay allowed so nobody gets
-        // trapped. Only applies near/below the water surface: airborne jumps
-        // above the waterline stay free.
         if (terrain != null) {
             float curDepth = Terrain.waterDepthAt(x, z);
             float nextDepth = Terrain.waterDepthAt(nx, nz);
@@ -340,40 +481,107 @@ public class Player {
             }
         }
 
-        // ---- Pass 1: vertical landing on the highest surface we cross ----
         boolean groundHit = false;
+        boolean wasAirborne = !isGrounded;
         float floorY = -999f;
         Obstacle landedOn = null;
 
-        for (Obstacle o : obstacles) {
-            if (!o.solid) continue; // road slabs, bushes, water: never floors
-            if (o.containsXZ(nx, nz, radius * 0.7f)) {
-                float topY = o.getMaxY();
-                // If player was above or crossing the top surface while falling
-                if (y >= topY - 0.4f && ny <= topY + 0.1f && vy <= 0f) {
-                    if (topY > floorY) {
-                        floorY = topY;
-                        groundHit = true;
-                        landedOn = o;
+        if (isGrounded && vy <= 0.001f) {
+            // ---- GROUNDED LOCOMOTION: STEP-UP AND GROUND SNAP ----
+            float stepCandidateY = -999f;
+            Obstacle stepCandidateObstacle = null;
+            float snapCandidateY = -999f;
+            Obstacle snapCandidateObstacle = null;
+
+            if (obstacles != null) {
+                for (Obstacle o : obstacles) {
+                    if (!o.solid) continue;
+                    if (o.containsXZ(nx, nz, radius)) {
+                        float topY = o.getMaxY();
+                        if (topY > y && topY <= y + MAX_STEP_UP + 0.02f) {
+                            if (topY > stepCandidateY && canStepUp(topY, nx, nz, obstacles)) {
+                                stepCandidateY = topY;
+                                stepCandidateObstacle = o;
+                            }
+                        } else if (topY <= y + 0.05f && topY >= y - MAX_STEP_DOWN) {
+                            if (topY > snapCandidateY) {
+                                snapCandidateY = topY;
+                                snapCandidateObstacle = o;
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        // Terrain heightfield is a landing candidate in the open world
-        if (terrain != null) {
-            float th = Terrain.heightAt(nx, nz);
-            if (y >= th - 0.4f && ny <= th + 0.1f && vy <= 0f && th > floorY) {
-                floorY = th;
+            if (terrain != null) {
+                float th = Terrain.heightAt(nx, nz);
+                if (th > y && th <= y + MAX_STEP_UP + 0.02f) {
+                    if (th > stepCandidateY && canStepUp(th, nx, nz, obstacles)) {
+                        stepCandidateY = th;
+                        stepCandidateObstacle = null;
+                    }
+                } else if (th <= y + 0.05f && th >= y - MAX_STEP_DOWN) {
+                    if (th > snapCandidateY) {
+                        snapCandidateY = th;
+                        snapCandidateObstacle = null;
+                    }
+                }
+            }
+
+            if (stepCandidateY > y) {
+                floorY = stepCandidateY;
+                landedOn = stepCandidateObstacle;
                 groundHit = true;
-                landedOn = null;
+                y = floorY;
+                ny = floorY;
+                vy = 0f;
+                isGrounded = true;
+            } else if (snapCandidateY > -990f) {
+                floorY = snapCandidateY;
+                landedOn = snapCandidateObstacle;
+                groundHit = true;
+                y = floorY;
+                ny = floorY;
+                vy = 0f;
+                isGrounded = true;
+            } else {
+                // Walked off a ledge or cliff
+                isGrounded = false;
+                peakFallY = y;
+                y = ny;
+            }
+        } else {
+            // ---- AIRBORNE: LANDING DETECTION ----
+            if (obstacles != null) {
+                for (Obstacle o : obstacles) {
+                    if (!o.solid) continue;
+                    if (o.containsXZ(nx, nz, radius)) {
+                        float topY = o.getMaxY();
+                        if (y >= topY - 0.4f && ny <= topY + 0.1f && vy <= 0f) {
+                            if (topY > floorY) {
+                                floorY = topY;
+                                groundHit = true;
+                                landedOn = o;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (terrain != null) {
+                float th = Terrain.heightAt(nx, nz);
+                if (y >= th - 0.4f && ny <= th + 0.1f && vy <= 0f && th > floorY) {
+                    floorY = th;
+                    groundHit = true;
+                    landedOn = null;
+                }
             }
         }
 
         if (groundHit && landedOn != null) {
             // Jump Pad trigger
             if (landedOn.type == Obstacle.Type.JUMP_PAD) {
-                vy = 20.0f; // High-pressure boost!
+                vy = 20.0f;
                 isGrounded = false;
                 playDoubleJumpSfx = true;
                 addCombo("FAN BOOST!", 15);
@@ -384,26 +592,27 @@ public class Player {
         }
 
         // ---- Pass 2: horizontal wall push-out ----
-        // Only when the body actually intersects the wall volume: feet below
-        // the obstacle top (with tolerance) and body bottom above its base.
-        // The obstacle we are landing on never pushes (that is the floor).
-        for (Obstacle o : obstacles) {
-            if (o == landedOn) continue;
-            if (ny >= o.getMaxY() - 0.05f) continue;      // feet at/above the top: that is a floor, not a wall
-            if (ny + currentHeight <= o.getMinY()) continue; // body entirely below the obstacle
-            if (nx + radius > o.getMinX() && nx - radius < o.getMaxX() &&
-                nz + radius > o.getMinZ() && nz - radius < o.getMaxZ()) {
-                // Push out horizontally along smallest penetration axis
-                float dx1 = Math.abs((nx + radius) - o.getMinX());
-                float dx2 = Math.abs((nx - radius) - o.getMaxX());
-                float dz1 = Math.abs((nz + radius) - o.getMinZ());
-                float dz2 = Math.abs((nz - radius) - o.getMaxZ());
-                float minPen = Math.min(Math.min(dx1, dx2), Math.min(dz1, dz2));
+        if (obstacles != null) {
+            for (Obstacle o : obstacles) {
+                if (!o.solid) continue;
+                if (o == landedOn) continue;
+                if (ny >= o.getMaxY() - 0.05f) continue;
+                if (ny + currentHeight <= o.getMinY()) continue;
+                if (isGrounded && y >= o.getMaxY() - 0.05f) continue;
 
-                if (minPen == dx1) { nx = o.getMinX() - radius; vx = 0; }
-                else if (minPen == dx2) { nx = o.getMaxX() + radius; vx = 0; }
-                else if (minPen == dz1) { nz = o.getMinZ() - radius; vz = 0; }
-                else { nz = o.getMaxZ() + radius; vz = 0; }
+                if (nx + radius > o.getMinX() && nx - radius < o.getMaxX() &&
+                    nz + radius > o.getMinZ() && nz - radius < o.getMaxZ()) {
+                    float dx1 = Math.abs((nx + radius) - o.getMinX());
+                    float dx2 = Math.abs((nx - radius) - o.getMaxX());
+                    float dz1 = Math.abs((nz + radius) - o.getMinZ());
+                    float dz2 = Math.abs((nz - radius) - o.getMaxZ());
+                    float minPen = Math.min(Math.min(dx1, dx2), Math.min(dz1, dz2));
+
+                    if (minPen == dx1) { nx = o.getMinX() - radius; vx = 0; }
+                    else if (minPen == dx2) { nx = o.getMaxX() + radius; vx = 0; }
+                    else if (minPen == dz1) { nz = o.getMinZ() - radius; vz = 0; }
+                    else { nz = o.getMaxZ() + radius; vz = 0; }
+                }
             }
         }
 
@@ -415,7 +624,7 @@ public class Player {
             isGrounded = true;
             canDoubleJump = true;
 
-            // Hazard pool contact (ticking damage with a short cooldown)
+            // Hazard pool contact
             if (landedOn != null && landedOn.type == Obstacle.Type.HAZARD_POOL) {
                 if (hazardCooldown <= 0f) {
                     health -= 35f;
@@ -433,28 +642,32 @@ public class Player {
                 peakFallY = y;
                 x = nx;
                 z = nz;
-                return; // hazard handles its own landing (no fall damage math)
+                return;
             }
 
-            // Landing calculation: High fall check
-            if (dropDist > 5.0f) {
-                if (slidePressed) {
-                    // Executed safety roll! Negates fall damage!
-                    startSafetyRoll();
-                } else {
-                    // Hard impact landing! Fall damage!
-                    float dmg = (dropDist - 6.0f) * 6.5f;
-                    if (dmg > 0f) {
-                        health -= dmg;
-                        playHardLandSfx = true;
-                        hardLandTimer = 0.45f;
-                        state = ParkourState.HARD_LAND;
-                        addCombo("ROUGH LANDING", 0);
-                        if (health <= 0) {
-                            health = 0;
-                            state = ParkourState.DEAD;
+            if (wasAirborne) {
+                // Landing calculation: High fall check vs Soft land
+                if (dropDist > 5.0f) {
+                    if (slidePressed) {
+                        startSafetyRoll();
+                    } else {
+                        float dmg = (dropDist - 6.0f) * 6.5f;
+                        if (dmg > 0f) {
+                            health -= dmg;
+                            playHardLandSfx = true;
+                            hardLandTimer = 0.45f;
+                            state = ParkourState.HARD_LAND;
+                            addCombo("ROUGH LANDING", 0);
+                            if (health <= 0) {
+                                health = 0;
+                                state = ParkourState.DEAD;
+                            }
                         }
                     }
+                } else if (dropDist > 1.2f || lastImpactVelocity < -4.0f) {
+                    state = ParkourState.LAND;
+                    landTimer = landDuration;
+                    playFootstepSfx = true;
                 }
             }
             peakFallY = y;
@@ -465,6 +678,14 @@ public class Player {
 
         x = nx;
         z = nz;
+
+        // Ground-height adherence on open-world terrain after push-out
+        if (isGrounded && terrain != null && landedOn == null) {
+            float finalTh = Terrain.heightAt(x, z);
+            if (Math.abs(y - finalTh) <= MAX_STEP_UP) {
+                y = finalTh;
+            }
+        }
     }
 
     private Obstacle checkVaultBarrierAhead(List<Obstacle> obstacles, float fx, float fz) {
@@ -514,7 +735,7 @@ public class Player {
         addCombo("SLIDE!", 10);
     }
 
-    private void updateSliding(float dt, boolean jumpPressed) {
+    private void updateSliding(float dt, boolean jumpPressed, List<Obstacle> obstacles) {
         slideTimer -= dt;
         float radYaw = (float) Math.toRadians(yaw);
         float fx = (float) Math.sin(radYaw);
@@ -525,19 +746,33 @@ public class Player {
 
         // Slide cancel with Jump
         if (jumpPressed) {
-            currentHeight = standingHeight;
-            vy = jumpImpulse * 0.9f;
-            isGrounded = false;
-            state = ParkourState.JUMP;
-            playJumpSfx = true;
-            addCombo("SLIDE KICK!", 15);
-            return;
+            if (canStandUp(obstacles)) {
+                currentHeight = standingHeight;
+                isCrouching = false;
+                vy = jumpImpulse * 0.9f;
+                isGrounded = false;
+                state = ParkourState.JUMP;
+                playJumpSfx = true;
+                addCombo("SLIDE KICK!", 15);
+                return;
+            }
         }
 
         if (slideTimer <= 0f) {
-            currentHeight = standingHeight;
-            state = isGrounded ? ParkourState.RUN : ParkourState.FALLING;
+            if (canStandUp(obstacles)) {
+                currentHeight = standingHeight;
+                isCrouching = false;
+                state = isGrounded ? ParkourState.RUN : ParkourState.FALLING;
+            } else {
+                currentHeight = crouchingHeight;
+                isCrouching = true;
+                state = ParkourState.CROUCH;
+            }
         }
+    }
+
+    private void updateSliding(float dt, boolean jumpPressed) {
+        updateSliding(dt, jumpPressed, null);
     }
 
     private void startSafetyRoll() {
@@ -548,7 +783,7 @@ public class Player {
         addCombo("SAFETY ROLL! (0 DMG)", 25);
     }
 
-    private void updateSafetyRoll(float dt) {
+    private void updateSafetyRoll(float dt, List<Obstacle> obstacles) {
         rollTimer -= dt;
         float radYaw = (float) Math.toRadians(yaw);
         float fx = (float) Math.sin(radYaw);
@@ -557,10 +792,21 @@ public class Player {
         z += fz * 11.5f * dt;
 
         if (rollTimer <= 0f) {
-            currentHeight = standingHeight;
-            state = ParkourState.SPRINT;
+            if (canStandUp(obstacles)) {
+                currentHeight = standingHeight;
+                isCrouching = false;
+                state = ParkourState.SPRINT;
+            } else {
+                currentHeight = crouchingHeight;
+                isCrouching = true;
+                state = ParkourState.CROUCH;
+            }
             isGrounded = true;
         }
+    }
+
+    private void updateSafetyRoll(float dt) {
+        updateSafetyRoll(dt, null);
     }
 
     private void updateHardLand(float dt) {

@@ -702,7 +702,8 @@ public class WorldRenderer {
 
         if (!player.firstPersonView && player.state != Player.ParkourState.DEAD) {
             float w = (player.state == Player.ParkourState.SLIDING
-                    || player.state == Player.ParkourState.SAFETY_ROLL) ? 1.1f : 0.75f;
+                    || player.state == Player.ParkourState.SAFETY_ROLL
+                    || player.state == Player.ParkourState.CROUCH) ? 1.05f : 0.75f;
             float h = player.currentHeight;
             float tintR = player.adrenalineRush ? 1.0f : 0.25f;
             float tintG = player.adrenalineRush ? 0.85f : 0.7f;

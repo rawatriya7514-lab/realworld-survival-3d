@@ -9,7 +9,7 @@ possible (no adb available in this environment; see KNOWN_ISSUES.md).
 |---|---|---|---|
 | 0 | Project audit + architecture docs | **DONE** | `PHASE-0` commit |
 | 1 | Game foundation: mode select, open-world scene loads playable | **DONE** | `PHASE-1` commit |
-| 2 | Movement: terrain locomotion, all states, collision | PLANNED | — |
+| 2 | Movement: terrain locomotion, all states, collision | **DONE** | `PHASE-2` commit |
 | 3 | Animations: procedural state machine + blending | PLANNED | — |
 | 4 | Camera: follow, orbit, zoom, collision, terrain-aware | PLANNED | — |
 | 5 | Touch controls: joystick/buttons + layout settings | PLANNED | — |
@@ -100,11 +100,49 @@ Known phase-1 limitations (tracked, see KNOWN_ISSUES.md):
 - Open-world progress is not saved yet (Phase 12).
 - No day/night cycle yet (Phase 7); dusk lighting inherited from parkour.
 
-### PHASE 2 — Movement — PLANNED
-- Full ground state machine on terrain: idle/walk/jog/run/sprint/jump/fall/
-  land/crouch; step-up ≤0.55 m, slope handling, ground snap without teleport.
-- Gate: new JVM movement checks + parkour regression must stay green before
-  any renderer change.
+### PHASE 2 — Movement (2026-11-11) — DONE
+Scope: complete ground and airborne movement state machine across terrain,
+rooftops, and structures; step-up (<=0.55m), ground snap without teleportation,
+and terrain slope handling (walkable uphill resistance + steep canyon deflection).
+
+What was built (all original code):
+- `Player.ParkourState`: added `WALK`, `JOG`, `CROUCH`, `LAND` states to the
+  state machine alongside `STAND`, `RUN`, `SPRINT`, `JUMP`, `DOUBLE_JUMP`,
+  `FALLING`, `HARD_LAND`, `SAFETY_ROLL`, and parkour agility states.
+- Movement speeds: analog-tiered speed progression (`walkSpeed` 3.5, `jogSpeed` 5.5,
+  `runSpeed` 7.5, `sprintSpeed` 12.0, `crouchSpeed` 2.5 m/s).
+- Crouch system: crouch toggle/hold via `crouchPressed` or `slidePressed` when
+  not sprinting; bounding box drops to `crouchingHeight = 0.8m`; overhead headroom
+  clearance check (`canStandUp`) prevents standing up under low ceilings (e.g. 1.3m);
+  sliding/safety roll under low ceilings smoothly exits into `CROUCH`; quiet footsteps.
+- Step-Up (<=0.55m): smooth forward step-up onto curbs, road slabs, crates, and
+  terrain bumps; headroom validation (`canStepUp`) checks clearance above target;
+  suppresses horizontal push-out when body steps onto surface top.
+- Ground Snap (<=0.55m): continuous ground contact down slopes, curbs, and
+  staircases without falling jitter; drop >0.55m (cliff/roof edge) naturally
+  transitions into airborne `FALLING` without instant teleportation.
+- Slope Handling: terrain normal evaluation (`normalAt`); walkable slopes
+  (normal.y >= 0.60) feature mild uphill resistance and smooth ascent/descent;
+  steep cliffs (normal.y < 0.60, river canyon) deflect inward velocity along
+  slope tangent and slide the character down under gravity.
+- Landing: soft landing state `LAND` (0.12s absorption, 0 damage) for drops
+  between 1.2m and 5.0m; immediately cancellable by movement input for zero
+  control latency; high drops (>5.0m) retain `HARD_LAND` damage vs `SAFETY_ROLL`.
+- Visuals: `WorldRenderer` updated to render crouching silhouette (`CROUCH` width 1.05m,
+  height matches `currentHeight` 0.8m).
+- Tests: `tests/MovementTest.java` (6 groups, 45 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed** (parkour
+  regression intact), OpenWorldTest **82 passed / 0 failed**, MovementTest
+  **45 passed / 0 failed**. Total: **2,559 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 20 classes).
+- APK: built, 22,019,982 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2559/0.
+
+Known phase-2 limitations (tracked, see KNOWN_ISSUES.md):
+- Camera height follows standing eye-level during crouch (offset lowers in Phase 4).
+- Procedural limb animations not yet speed-matched (Phase 3).
 
 ### PHASE 3 — Animations — PLANNED
 - Procedural limb animation with blending + speed matching (fallback approach,

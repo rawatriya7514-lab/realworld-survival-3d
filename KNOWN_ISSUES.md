@@ -40,8 +40,20 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
+## Open issues (Phase 2)
+1. **Camera height does not yet lower when crouching** — player collision
+   bounding box and visual model crouch properly (height drops to 0.8 m), but
+   camera height follows standing head offset until Camera Phase 4.
+2. **Procedural limb animations not yet speed-matched** — animation state
+   machine and blending land in Phase 3.
+
 ## Resolved during development
 - PHASE 1: flat-channel trap on entering deep water (strictly-deeper rule),
   1 cm/frame creep epsilon, bridge-corridor approach flatten coverage
   (±85 m), leftover `considerFloor` stub, private `Terrain` constructor,
   stale `renderHUD(gl, …)` call. Details: TEST_REPORT.md §Phase 1.
+- PHASE 2: analog walk/jog speed threshold boundary separation (walk <= 3.8,
+  jog <= 6.0, run <= 8.5), mid-air jump-to-fall transition on vy < 0,
+  step-up detection probe margin aligned with collision radius (prevents
+  premature wall push-out before step-up), headroom validation on uncrouch
+  and step-up (prevents clipping through low ceilings). Details: TEST_REPORT.md §Phase 2.

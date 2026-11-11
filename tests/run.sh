@@ -18,7 +18,9 @@ javac -Xlint:-options -d "$OUT" \
     "$S/HunterEnemy.java" \
     "$S/Item.java" \
     "$ROOT/tests/GameLogicTest.java" \
-    "$ROOT/tests/OpenWorldTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/OpenWorldTest.java" \
+    "$ROOT/tests/MovementTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
+java -cp "$OUT" MovementTest
