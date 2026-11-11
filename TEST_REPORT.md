@@ -220,3 +220,46 @@ Defects found & fixed during this phase (real, encountered while testing):
 3. Hard-land screen shake test evaluated `screenShake` after frame attenuation
    decay rather than pre-decay peak → adjusted test threshold to reflect
    post-attenuation value (>0.30f from 0.40f peak).
+
+## Phase 5 — Touch Controls (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout + 6 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 36 checks, 0 failures | See test groups below |
+| Full Android compile (all 23 classes incl. TouchLayout) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,032,270 bytes | step [6/6] + apksigner output |
+| On-device runtime (touch latency, multi-touch feel) | **NOT TESTED** | No adb in environment; physical install pending |
+
+TouchLayoutTest groups (36 checks):
+1. **Geometry & Scaling**: Proportional scaling across buttonScale (0.8x to 1.3x);
+   strict clamping for out-of-range scale inputs (0.2x clamps to 0.8x, 2.5x clamps to 1.3x).
+2. **Opacity Clamping**: Button opacity clamped strictly within [0.4, 1.0].
+3. **Non-overlapping button layout**: All 8 action buttons (JUMP, CROUCH, VAULT,
+   SLIDE, SPRINT, CAM, INTERACT, PAUSE) are pairwise disjoint with comfortable finger gaps.
+4. **Dedicated CROUCH button**: Positioned next to Sprint; returns `ButtonType.CROUCH`;
+   wires directly to `player.update(...)` with overhead headroom clearance checks.
+5. **Left-handed mode mirroring**: When enabled, joystick mirrors to the right half
+   (X > screenWidth * 0.5f), action buttons mirror to the left half, and camera look
+   swipes are active on the left half without button conflicts.
+6. **Multi-aspect ratio stability**: Proportional placement verified across 4:3,
+   16:9, and 20:9 ultra-wide displays with zero out-of-bounds button coordinates.
+7. **Hit-testing precision**: Exact Euclidean distance hit-testing for all buttons;
+   contextual interact button active only when `interactVisible = true`; screen center
+   returns `ButtonType.NONE`.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. Legacy button spacing factor (1.7*radius) between Jump and Vault/Slide caused
+   partial bounding circle overlap (dist=188.4px vs minSafe=199.8px) because the sum
+   of their radii was 1.85*radius → upgraded button cluster spacing to 1.95*radius,
+   ensuring complete pairwise disjoint separation across all buttons.

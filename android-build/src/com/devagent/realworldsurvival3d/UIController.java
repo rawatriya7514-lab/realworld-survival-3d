@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -52,7 +53,8 @@ public class UIController {
     private TextView continueBtn;
 
     // Settings widgets
-    private TextView sensValue, musicValue, sfxValue, qualityValue, fpsValue, invertValue;
+    private TextView sensValue, musicValue, sfxValue, qualityValue, fpsValue, invertValue,
+            joySensValue, btnScaleValue, btnOpacityValue, leftHandedValue;
 
     // HUD elements
     private TextView hudMissionTitle, hudMissionGoal, hudStats, hudPrompt, hudBanner, hudSaved;
@@ -290,14 +292,60 @@ public class UIController {
         LinearLayout panel = panelBase(Gravity.CENTER);
         panel.addView(menuTitle("SETTINGS"));
 
-        musicValue = addSlider(panel, "Music volume", settings.musicVolume,
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setVerticalScrollBarEnabled(true);
+        LinearLayout inner = new LinearLayout(activity);
+        inner.setOrientation(LinearLayout.VERTICAL);
+
+        musicValue = addSlider(inner, "Music volume", settings.musicVolume,
                 new Slider() { public void set(float v) { settings.musicVolume = v; callbacks.onSettingsChanged(); } });
-        sfxValue = addSlider(panel, "SFX volume", settings.sfxVolume,
+        sfxValue = addSlider(inner, "SFX volume", settings.sfxVolume,
                 new Slider() { public void set(float v) { settings.sfxVolume = v; callbacks.onSettingsChanged(); } });
-        sensValue = addSlider(panel, "Camera sensitivity", settings.lookSensitivity,
+        sensValue = addSlider(inner, "Camera sensitivity", settings.lookSensitivity,
                 new Slider() { public void set(float v) { settings.lookSensitivity = v; callbacks.onSettingsChanged(); } });
 
-        qualityValue = addToggle(panel, "Graphics quality",
+        invertValue = addToggle(inner, "Invert camera Y", settings.invertLookY ? "On" : "Off",
+                new Click() {
+                    public void go() {
+                        settings.invertLookY = !settings.invertLookY;
+                        String v = settings.invertLookY ? "On" : "Off";
+                        invertValue.setText("Invert camera Y  " + v);
+                        callbacks.onSettingsChanged();
+                    }
+                });
+
+        joySensValue = addSlider(inner, "Joystick sensitivity",
+                GameSettings.sliderFromJoySens(settings.joystickSensitivity),
+                new Slider() { public void set(float v) {
+                    settings.joystickSensitivity = GameSettings.joySensFromSlider(v);
+                    callbacks.onSettingsChanged();
+                } });
+
+        btnScaleValue = addSlider(inner, "Button size",
+                GameSettings.sliderFromScale(settings.buttonScale),
+                new Slider() { public void set(float v) {
+                    settings.buttonScale = GameSettings.scaleFromSlider(v);
+                    callbacks.onSettingsChanged();
+                } });
+
+        btnOpacityValue = addSlider(inner, "Button opacity",
+                GameSettings.sliderFromOpacity(settings.buttonOpacity),
+                new Slider() { public void set(float v) {
+                    settings.buttonOpacity = GameSettings.opacityFromSlider(v);
+                    callbacks.onSettingsChanged();
+                } });
+
+        leftHandedValue = addToggle(inner, "Left-handed layout", settings.leftHanded ? "On" : "Off",
+                new Click() {
+                    public void go() {
+                        settings.leftHanded = !settings.leftHanded;
+                        String v = settings.leftHanded ? "On" : "Off";
+                        leftHandedValue.setText("Left-handed layout  " + v);
+                        callbacks.onSettingsChanged();
+                    }
+                });
+
+        qualityValue = addToggle(inner, "Graphics quality",
                 settings.graphicsQuality == GameSettings.QUALITY_HIGH ? "High" : "Performance",
                 new Click() {
                     public void go() {
@@ -309,7 +357,7 @@ public class UIController {
                     }
                 });
 
-        fpsValue = addToggle(panel, "FPS limit",
+        fpsValue = addToggle(inner, "FPS limit",
                 settings.fpsLimit == GameSettings.FPS_60 ? "60" : "30",
                 new Click() {
                     public void go() {
@@ -321,15 +369,11 @@ public class UIController {
                     }
                 });
 
-        invertValue = addToggle(panel, "Invert camera Y", settings.invertLookY ? "On" : "Off",
-                new Click() {
-                    public void go() {
-                        settings.invertLookY = !settings.invertLookY;
-                        String v = settings.invertLookY ? "On" : "Off";
-                        invertValue.setText("Invert camera Y  " + v);
-                        callbacks.onSettingsChanged();
-                    }
-                });
+        scroll.addView(inner, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f);
+        panel.addView(scroll, scrollLp);
 
         panel.addView(menuButton("Back", new Click() { public void go() { settings.save(); closeSettingsInternal(); } }), btnLp());
         return panel;

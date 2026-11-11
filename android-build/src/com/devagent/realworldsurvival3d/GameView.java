@@ -292,7 +292,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     private void updateOpenWorld(float dt) {
         openWorld.recomputeActive(player.x, player.z);
         player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
-                touchInput.slidePressed, touchInput.sprintToggled, openWorld.activeObstacles());
+                touchInput.slidePressed, touchInput.sprintToggled, touchInput.crouchToggled,
+                openWorld.activeObstacles());
 
         // Invisible border: keep the player inside the 896 m world
         if (player.x > 442f) { player.x = 442f; player.vx = 0f; }
@@ -388,11 +389,20 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
         if (touchInput == null) {
             touchInput = new TouchInput();
-            touchInput.sensitivityScale = settings.lookScale();
-            touchInput.invertLookY = settings.invertLookY;
-        } else {
-            touchInput.updateScreenSize(width, height);
         }
+        applyTouchSettings();
+        touchInput.updateScreenSize(width, height);
+    }
+
+    private void applyTouchSettings() {
+        if (touchInput == null) return;
+        touchInput.sensitivityScale = settings.lookScale();
+        touchInput.invertLookY = settings.invertLookY;
+        touchInput.buttonScale = settings.buttonScale;
+        touchInput.buttonOpacity = settings.buttonOpacity;
+        touchInput.leftHanded = settings.leftHanded;
+        touchInput.joystickSensitivity = settings.joystickSensitivity;
+        touchInput.updateScreenSize(touchInput.screenWidth, touchInput.screenHeight);
     }
 
     @Override
@@ -409,10 +419,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             applyAudioSettings();
             applyFrameBudget();
             if (worldRenderer != null) worldRenderer.setQuality(settings.graphicsQuality);
-            if (touchInput != null) {
-                touchInput.sensitivityScale = settings.lookScale();
-                touchInput.invertLookY = settings.invertLookY;
-            }
+            applyTouchSettings();
         }
 
         if (currentState == GameState.PLAYING) {
@@ -477,7 +484,8 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
         // Player physics
         player.update(dt, touchInput.moveX, touchInput.moveY, touchInput.jumpPressed,
-                touchInput.slidePressed, touchInput.sprintToggled, worldMap.obstacles);
+                touchInput.slidePressed, touchInput.sprintToggled, touchInput.crouchToggled,
+                worldMap.obstacles);
 
         // Health feedback & survival audio (shared with open world)
         processHealthFeedback(dt);

@@ -40,7 +40,7 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 4)
+## Open issues (Phase 5)
 1. **HunterEnemy uses single-box model** — HunterEnemy is rendered with single-cube
    body + glowing visor; full enemy animation rig planned for Phase 8 AI.
 
@@ -65,3 +65,8 @@ Maintained per phase; nothing is hidden.
   clearance clamp, pitch limits [-80, +80 deg], Dutch-angle roll on wall-runs,
   continuous pinch-zoom (0.8x-1.6x) and presets (CLOSE/NORMAL/FAR), pure Java 4x4
   view matrix math. Details: TEST_REPORT.md §Phase 4.
+- PHASE 5: touch controls HUD layout engine (`TouchLayout.java`), dedicated CROUCH
+  button with headroom validation, button scaling (0.8x-1.3x) and opacity (0.4-1.0),
+  left-handed layout mirroring (joystick on right, buttons on left), joystick sensitivity
+  multiplier (0.5x-1.5x), non-overlapping pairwise disjoint button positioning,
+  and settings menu scroll container. Details: TEST_REPORT.md §Phase 5.

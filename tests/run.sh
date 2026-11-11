@@ -19,14 +19,17 @@ javac -Xlint:-options -d "$OUT" \
     "$S/HunterEnemy.java" \
     "$S/Item.java" \
     "$S/CameraRig.java" \
+    "$S/TouchLayout.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
     "$ROOT/tests/AnimationTest.java" \
-    "$ROOT/tests/CameraTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/CameraTest.java" \
+    "$ROOT/tests/TouchLayoutTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
 java -cp "$OUT" MovementTest
 java -cp "$OUT" AnimationTest
 java -cp "$OUT" CameraTest
+java -cp "$OUT" TouchLayoutTest

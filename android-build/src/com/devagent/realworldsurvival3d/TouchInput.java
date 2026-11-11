@@ -13,6 +13,13 @@ public class TouchInput {
     public float screenWidth = 800f;
     public float screenHeight = 600f;
 
+    // Layout engine (Phase 5)
+    public final TouchLayout layout = new TouchLayout();
+    public float buttonScale = 1.0f;
+    public float buttonOpacity = 0.65f;
+    public boolean leftHanded = false;
+    public float joystickSensitivity = 1.0f;
+
     // Virtual Joystick
     public int joystickPointerId = -1;
     public float joystickBaseX = 160f;
@@ -41,6 +48,7 @@ public class TouchInput {
 
     // Action Buttons
     public boolean jumpPressed = false;
+    public boolean crouchToggled = false;
     public boolean vaultPressed = false;
     public boolean slidePressed = false;
     public boolean sprintToggled = false;
@@ -55,8 +63,9 @@ public class TouchInput {
     public float sensitivityScale = 1.0f;
     public boolean invertLookY = false;
 
-    // Button Bounding Boxes (Initialized in updateScreenSize)
+    // Button Bounding Boxes (Synchronized from TouchLayout)
     public float btnJumpX, btnJumpY, btnJumpRadius;
+    public float btnCrouchX, btnCrouchY, btnCrouchRadius;
     public float btnVaultX, btnVaultY, btnVaultRadius;
     public float btnSlideX, btnSlideY, btnSlideRadius;
     public float btnSprintX, btnSprintY, btnSprintRadius;
@@ -65,45 +74,51 @@ public class TouchInput {
     public float btnPauseX, btnPauseY, btnPauseRadius;
 
     public void updateScreenSize(float width, float height) {
-        this.screenWidth = width;
-        this.screenHeight = height;
+        layout.update(width, height, buttonScale, buttonOpacity, leftHanded);
 
-        joystickBaseX = width * 0.18f;
-        joystickBaseY = height * 0.75f;
-        joystickCurrentX = joystickBaseX;
-        joystickCurrentY = joystickBaseY;
-        joystickRadius = Math.min(width, height) * 0.16f;
+        this.screenWidth = layout.screenWidth;
+        this.screenHeight = layout.screenHeight;
 
-        // Button positions
-        btnJumpRadius = Math.min(width, height) * 0.10f;
-        btnJumpX = width - btnJumpRadius * 1.5f;
-        btnJumpY = height - btnJumpRadius * 1.5f;
+        this.joystickBaseX = layout.joystickBaseX;
+        this.joystickBaseY = layout.joystickBaseY;
+        this.joystickRadius = layout.joystickRadius;
 
-        btnVaultRadius = btnJumpRadius * 0.85f;
-        btnVaultX = btnJumpX - btnJumpRadius * 1.7f;
-        btnVaultY = height - btnVaultRadius * 1.3f;
+        if (!isJoystickActive) {
+            joystickCurrentX = joystickBaseX;
+            joystickCurrentY = joystickBaseY;
+        }
 
-        btnSlideRadius = btnJumpRadius * 0.85f;
-        btnSlideX = btnJumpX;
-        btnSlideY = btnJumpY - btnJumpRadius * 1.7f;
+        this.btnJumpX = layout.btnJumpX;
+        this.btnJumpY = layout.btnJumpY;
+        this.btnJumpRadius = layout.btnJumpRadius;
 
-        btnSprintRadius = btnJumpRadius * 0.75f;
-        btnSprintX = btnVaultX;
-        btnSprintY = btnSlideY;
+        this.btnCrouchX = layout.btnCrouchX;
+        this.btnCrouchY = layout.btnCrouchY;
+        this.btnCrouchRadius = layout.btnCrouchRadius;
 
-        btnCamRadius = btnJumpRadius * 0.65f;
-        btnCamX = width - btnCamRadius * 1.8f;
-        btnCamY = btnCamRadius * 1.8f;
+        this.btnVaultX = layout.btnVaultX;
+        this.btnVaultY = layout.btnVaultY;
+        this.btnVaultRadius = layout.btnVaultRadius;
 
-        // Pause button sits just left of the camera toggle (top-right)
-        btnPauseRadius = btnJumpRadius * 0.55f;
-        btnPauseX = btnCamX - btnCamRadius * 2.4f;
-        btnPauseY = btnCamY;
+        this.btnSlideX = layout.btnSlideX;
+        this.btnSlideY = layout.btnSlideY;
+        this.btnSlideRadius = layout.btnSlideRadius;
 
-        // Interact button floats mid-right, above the action cluster
-        btnInteractRadius = btnJumpRadius * 0.9f;
-        btnInteractX = width - btnInteractRadius * 2.0f;
-        btnInteractY = height * 0.46f;
+        this.btnSprintX = layout.btnSprintX;
+        this.btnSprintY = layout.btnSprintY;
+        this.btnSprintRadius = layout.btnSprintRadius;
+
+        this.btnCamX = layout.btnCamX;
+        this.btnCamY = layout.btnCamY;
+        this.btnCamRadius = layout.btnCamRadius;
+
+        this.btnPauseX = layout.btnPauseX;
+        this.btnPauseY = layout.btnPauseY;
+        this.btnPauseRadius = layout.btnPauseRadius;
+
+        this.btnInteractX = layout.btnInteractX;
+        this.btnInteractY = layout.btnInteractY;
+        this.btnInteractRadius = layout.btnInteractRadius;
     }
 
     public void handleTouchEvent(MotionEvent event) {
@@ -117,38 +132,22 @@ public class TouchInput {
                 float px = event.getX(pointerIndex);
                 float py = event.getY(pointerIndex);
 
-                // Check Action Buttons first
-                if (isInsideCircle(px, py, btnJumpX, btnJumpY, btnJumpRadius)) {
-                    jumpPressed = true;
-                    return;
-                }
-                if (isInsideCircle(px, py, btnVaultX, btnVaultY, btnVaultRadius)) {
-                    vaultPressed = true;
-                    return;
-                }
-                if (isInsideCircle(px, py, btnSlideX, btnSlideY, btnSlideRadius)) {
-                    slidePressed = true;
-                    return;
-                }
-                if (isInsideCircle(px, py, btnSprintX, btnSprintY, btnSprintRadius)) {
-                    sprintToggled = true;
-                    return;
-                }
-                if (isInsideCircle(px, py, btnCamX, btnCamY, btnCamRadius)) {
-                    camTogglePressed = true;
-                    return;
-                }
-                if (interactVisible && isInsideCircle(px, py, btnInteractX, btnInteractY, btnInteractRadius)) {
-                    interactPressed = true;
-                    return;
-                }
-                if (isInsideCircle(px, py, btnPauseX, btnPauseY, btnPauseRadius)) {
-                    pausePressed = true;
-                    return;
+                // Check Action Buttons via TouchLayout
+                TouchLayout.ButtonType btn = layout.testButton(px, py, interactVisible);
+                switch (btn) {
+                    case JUMP: jumpPressed = true; return;
+                    case CROUCH: crouchToggled = true; return;
+                    case VAULT: vaultPressed = true; return;
+                    case SLIDE: slidePressed = true; return;
+                    case SPRINT: sprintToggled = true; return;
+                    case CAM: camTogglePressed = true; return;
+                    case INTERACT: interactPressed = true; return;
+                    case PAUSE: pausePressed = true; return;
+                    case NONE: break;
                 }
 
-                // Left side = Joystick
-                if (px < screenWidth * 0.45f && joystickPointerId == -1) {
+                // Joystick region (adaptive for handedness)
+                if (layout.isJoystickZone(px, py) && joystickPointerId == -1) {
                     joystickPointerId = pointerId;
                     joystickBaseX = px;
                     joystickBaseY = py;
@@ -157,8 +156,8 @@ public class TouchInput {
                     isJoystickActive = true;
                     updateJoystickValues();
                 }
-                // Right side = Camera look & pinch zoom
-                else if (px >= screenWidth * 0.45f) {
+                // Camera look & pinch zoom region (adaptive for handedness)
+                else if (layout.isCameraZone(px, py)) {
                     if (cameraPointerId == -1) {
                         cameraPointerId = pointerId;
                         lastCameraX = px;
@@ -257,19 +256,14 @@ public class TouchInput {
             moveX = 0f;
             moveY = 0f;
         } else {
-            moveX = dx / joystickRadius;
-            moveY = dy / joystickRadius;
+            moveX = Math.max(-1f, Math.min(1f, (dx / joystickRadius) * joystickSensitivity));
+            moveY = Math.max(-1f, Math.min(1f, (dy / joystickRadius) * joystickSensitivity));
         }
-    }
-
-    private boolean isInsideCircle(float px, float py, float cx, float cy, float radius) {
-        float dx = px - cx;
-        float dy = py - cy;
-        return (dx * dx + dy * dy) <= (radius * radius);
     }
 
     public void resetFrameButtons() {
         jumpPressed = false;
+        crouchToggled = false;
         vaultPressed = false;
         slidePressed = false;
         sprintToggled = false;

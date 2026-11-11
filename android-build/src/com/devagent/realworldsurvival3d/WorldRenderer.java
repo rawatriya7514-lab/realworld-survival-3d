@@ -1149,32 +1149,45 @@ public class WorldRenderer {
                 1.0f, 0.75f, 0.1f);
 
         if (touch != null) {
+            float op = touch.buttonOpacity;
             drawCircle(mvp, tmp, touch.joystickBaseX, touch.joystickBaseY,
-                    touch.joystickRadius, 0.25f, 0.25f, 0.3f, 0.40f);
+                    touch.joystickRadius, 0.25f, 0.25f, 0.3f, op * 0.60f);
             drawCircle(mvp, tmp, touch.joystickCurrentX, touch.joystickCurrentY,
                     touch.joystickRadius * 0.42f, 0.2f, 0.85f, 0.95f,
-                    touch.isJoystickActive ? 0.85f : 0.5f);
+                    touch.isJoystickActive ? Math.min(1.0f, op * 1.3f) : op * 0.75f);
 
             drawCircle(mvp, tmp, touch.btnJumpX, touch.btnJumpY, touch.btnJumpRadius,
-                    0.10f, 0.75f, 0.95f, 0.65f);
+                    0.10f, 0.75f, 0.95f, op);
             drawCircle(mvp, tmp, touch.btnVaultX, touch.btnVaultY, touch.btnVaultRadius,
-                    0.95f, 0.85f, 0.10f, 0.65f);
+                    0.95f, 0.85f, 0.10f, op);
             drawCircle(mvp, tmp, touch.btnSlideX, touch.btnSlideY, touch.btnSlideRadius,
-                    0.95f, 0.45f, 0.15f, 0.65f);
+                    0.95f, 0.45f, 0.15f, op);
             drawCircle(mvp, tmp, touch.btnSprintX, touch.btnSprintY, touch.btnSprintRadius,
                     player.isSprinting ? 0.95f : 0.4f, 0.3f,
-                    player.isSprinting ? 0.2f : 0.8f, 0.75f);
+                    player.isSprinting ? 0.2f : 0.8f,
+                    player.isSprinting ? Math.min(1.0f, op * 1.3f) : op);
+
+            // Dedicated Crouch button (Phase 5)
+            if (touch.btnCrouchRadius > 0) {
+                boolean crouched = player.isCrouching || player.state == Player.ParkourState.CROUCH;
+                drawCircle(mvp, tmp, touch.btnCrouchX, touch.btnCrouchY, touch.btnCrouchRadius,
+                        crouched ? 0.25f : 0.45f,
+                        crouched ? 0.90f : 0.60f,
+                        crouched ? 0.80f : 0.70f,
+                        crouched ? Math.min(1.0f, op * 1.3f) : op);
+            }
+
             if (touch.btnCamRadius > 0) {
                 drawCircle(mvp, tmp, touch.btnCamX, touch.btnCamY, touch.btnCamRadius,
-                        0.6f, 0.6f, 0.7f, 0.6f);
+                        0.6f, 0.6f, 0.7f, op * 0.9f);
             }
             if (touch.btnInteractRadius > 0 && touch.interactVisible) {
                 drawCircle(mvp, tmp, touch.btnInteractX, touch.btnInteractY,
-                        touch.btnInteractRadius, 1.0f, 0.65f, 0.1f, 0.85f);
+                        touch.btnInteractRadius, 1.0f, 0.65f, 0.1f, Math.min(1.0f, op * 1.3f));
             }
             if (touch.btnPauseRadius > 0) {
                 drawCircle(mvp, tmp, touch.btnPauseX, touch.btnPauseY, touch.btnPauseRadius,
-                        0.9f, 0.9f, 0.95f, 0.55f);
+                        0.9f, 0.9f, 0.95f, op * 0.85f);
             }
         }
 

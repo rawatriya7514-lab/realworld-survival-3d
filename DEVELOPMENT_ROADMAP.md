@@ -12,7 +12,7 @@ possible (no adb available in this environment; see KNOWN_ISSUES.md).
 | 2 | Movement: terrain locomotion, all states, collision | **DONE** | `PHASE-2` commit |
 | 3 | Animations: procedural state machine + blending | **DONE** | `PHASE-3` commit |
 | 4 | Camera: follow, orbit, zoom, collision, terrain-aware | **DONE** | `PHASE-4` commit |
-| 5 | Touch controls: joystick/buttons + layout settings | PLANNED | — |
+| 5 | Touch controls: joystick/buttons + layout settings | **DONE** | `PHASE-5` commit |
 | 6 | World map: fullscreen map, minimap, waypoints, navigation | PLANNED | — |
 | 7 | Environment: terrain/roads/buildings-interiors/water/trees/day-night | PLANNED | — |
 | 8 | AI: civilian NPCs + hostiles with staggered updates | PLANNED | — |
@@ -212,9 +212,42 @@ Test results (real, this session):
 Known phase-4 limitations (tracked, see KNOWN_ISSUES.md):
 - HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 5 — Touch controls — PLANNED
-- Full HUD layout settings (size/opacity/left-handed), extra action buttons.
-- Gate: build PASS + layout math checks.
+### PHASE 5 — Touch controls (2026-11-11) — DONE
+Scope: pure Java touch layout engine (`TouchLayout.java`), dedicated CROUCH button,
+HUD customization settings (button scale 0.8x-1.3x, button opacity 0.4-1.0,
+left-handed layout mirroring, joystick sensitivity 0.5x-1.5x), pairwise disjoint
+button positioning, and scrollable Settings UI menu.
+
+What was built (all original code):
+- `TouchLayout.java` (new, pure Java): adaptive layout engine calculating
+  screen positions and radii for virtual joystick and all 8 action buttons (JUMP,
+  CROUCH, VAULT, SLIDE, SPRINT, CAM, INTERACT, PAUSE); button scaling (0.8x - 1.3x)
+  and opacity clamping (0.4 - 1.0); left-handed layout mirroring (joystick on
+  right 82% X, buttons on left, swipe regions adapted); pairwise disjoint
+  separation eliminating button overlaps; Euclidean distance hit-testing.
+- `TouchInput.java` updates: integrates `TouchLayout`, adds `crouchToggled`,
+  scales joystick velocity with `joystickSensitivity`, supports pinch-to-zoom
+  pointer tracking and smooth pointer hand-offs.
+- `GameSettings.java` updates: adds persistence keys for buttonScale, buttonOpacity,
+  leftHanded, and joystickSensitivity with slider conversion helpers.
+- `UIController.java` updates: settings menu adds sliders for joystick sensitivity,
+  button size, and button opacity, plus a toggle for left-handed layout; wrapped
+  in vertical `ScrollView` so settings never overflow on landscape screens.
+- `WorldRenderer.java` updates: renders dedicated `btnCrouch` circle with active
+  glow when crouching; scales all HUD button alpha dynamically with `touch.buttonOpacity`.
+- Tests: `tests/TouchLayoutTest.java` (7 groups, 36 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **36 passed / 0 failed**. Total: **2,667 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 23 classes).
+- APK: built, 22,032,270 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2667/0.
+
+Known phase-5 limitations (tracked, see KNOWN_ISSUES.md):
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
 ### PHASE 6 — World map — PLANNED
 - Fullscreen map (pinch/pan/markers/waypoints) + rotating minimap + road
