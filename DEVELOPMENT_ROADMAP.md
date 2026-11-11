@@ -621,5 +621,41 @@ Test results (real, this session):
 Known phase-13 limitations (tracked, see KNOWN_ISSUES.md):
 - Final comprehensive dual-mode regression test suite planned for Phase 14.
 
-### PHASE 14 — Final QA & dual-mode verification — IN PROGRESS
-### PHASE 15 — Release APK delivery — PLANNED
+### PHASE 14 — Final QA & dual-mode verification (2026-11-11) — DONE
+Scope: Comprehensive end-to-end regression audit across both Parkour Campaign and Open-World modes
+(`tests/FinalQATest.java`). Evaluates 12 system dimensions:
+1. Dual-mode isolation & parity (Parkour 6-rooftop campaign vs Open-World 896m foundation).
+2. Parkour campaign full mechanics flow (locomotion states, vault, slide, high-fall roll damage mitigation, enemy stomp bounce, helipad extraction).
+3. Open-World 896m terrain, biomes, boundaries, & active 3x3 chunk streaming.
+4. Walkable architectural building interiors, solid walls, solid ceilings, and floor height snapping.
+5. Road network Dijkstra shortest path routing across regions/bridge & dynamic navigation rerouting.
+6. Civilian & Hostile AI behaviors, Central Plaza safe haven repulsion buffer, & staggered updates.
+7. "The Long Signal" 6-mission story arc & 5 collectible data slates.
+8. Survival backpack inventory (12 slots, item stacking, consumables application, quest item protection).
+9. Vehicle driving dynamics (SUV & motorcycle throttle, brake, reverse, velocity-proportional steering, handbrake drift, obstacle collisions, roadkill ramming).
+10. 3D spatial audio mixing, linear-to-dB conversions, stereo panning, engine pitch modulation, & cooldown gates.
+11. Save/Load persistence round trip, CRC32 verification, atomic staging (`.tmp`), and backup self-healing (`.bak`).
+12. Optimization passes (sphere/AABB frustum culling, zero-alloc analytical TRS matrices, delta-time clamping, frame budgets).
+
+What was built (all original code):
+- `tests/FinalQATest.java` (new, pure Java): 12 comprehensive test groups with 129 checks verifying all subsystem interactions and regression parity.
+- `tests/run.sh` updates: added `FinalQATest.java` to test compilation and test execution pipelines.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**, InventoryVehicleTest
+  **51 passed / 0 failed**, AudioSettingsTest **142 passed / 0 failed**, SaveLoadTest
+  **87 passed / 0 failed**, OptimizationTest **36 passed / 0 failed**, FinalQATest
+  **129 passed / 0 failed**. Total: **3,362 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 39 classes).
+- APK: built, 22,458,892 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 3362/0.
+
+Known phase-14 limitations (tracked, see KNOWN_ISSUES.md):
+- Final release APK build and integrity packaging planned for Phase 15.
+
+### PHASE 15 — Release APK delivery — IN PROGRESS

@@ -40,10 +40,12 @@ Maintained per phase; nothing is hidden.
    on a real screen (no adb). First device test is the top priority of the
    next phase.
 
-## Open issues (Phase 13)
-1. **Final QA & Dual-Mode End-to-End Audit** — Comprehensive cross-system verification covering parkour campaign, 896m open world, vehicle driving, combat, mission progression, inventory, and save/load planned for Phase 14.
+## Open issues (Phase 14)
+1. **Release Packaging & Distribution Checksum** — Phase 15 release APK packaging, SHA-256 integrity checksum generation, and final project delivery.
 
 ## Resolved during development
+- PHASE 14: Comprehensive end-to-end QA audit (`tests/FinalQATest.java`) across all 14 subsystem
+  dimensions (3,362 total checks passed across 16 test suites, 0 regressions, full APK build and signature verified).
 - PHASE 13: Spatial frustum and sphere culling engine (`CullingOptimizer.java`), in-place zero-allocation
   TRS matrix generation, elimination of per-frame heap matrix allocations in `WorldRenderer.java`,
   delta-time hitch clamping [1ms, 100ms] and frame budget regulation (60 FPS/30 FPS) in `GameView.java`.

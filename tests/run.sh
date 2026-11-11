@@ -50,7 +50,8 @@ javac -Xlint:-options -d "$OUT" \
     "$ROOT/tests/InventoryVehicleTest.java" \
     "$ROOT/tests/AudioSettingsTest.java" \
     "$ROOT/tests/SaveLoadTest.java" \
-    "$ROOT/tests/OptimizationTest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/OptimizationTest.java" \
+    "$ROOT/tests/FinalQATest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -67,3 +68,4 @@ java -cp "$OUT" InventoryVehicleTest
 java -cp "$OUT" AudioSettingsTest
 java -cp "$OUT" SaveLoadTest
 java -cp "$OUT" OptimizationTest
+java -cp "$OUT" FinalQATest

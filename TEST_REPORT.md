@@ -671,3 +671,56 @@ Defects found & fixed during this phase (real, encountered while testing):
 1. Sign error in `CullingOptimizer.java` FOV cone test (`cosAngle < -0.173f` instead of `+0.173f`) caused extreme off-axis spheres to fail culling → corrected to `+0.173f` (positive cosine for 80-degree half-angle).
 2. `Mat4.java` imports `android.opengl.Matrix` which cannot be loaded in pure JVM test runner without `android.jar` → moved pure math `setTRS` into `CullingOptimizer.java` and delegated from `Mat4.java`.
 3. In `WorldRenderer.java`, pre-allocated reusable scratch arrays (`scratchMvp`, `scratchModel`, `scratchTmp`, `scratchPoseMatrix`) to eliminate all `new float[16]` heap churn in the render loop.
+
+## Phase 14 — Final QA Audit & Dual-Mode Verification (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager,
+  Inventory, Vehicle, AudioMixer, SettingsConfig, SaveState, SaveFileManager,
+  CullingOptimizer + 16 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Inventory & Vehicles JVM suite (`InventoryVehicleTest`) | **PASS** — 51 checks, 0 failures | Stacking, consumables, vehicle physics, roadkill ramming |
+| Audio & Settings JVM suite (`AudioSettingsTest`) | **PASS** — 142 checks, 0 failures | Mixing, dB conversions, 3D spatial pan, engine pitch, config |
+| Save/Load Persistence JVM suite (`SaveLoadTest`) | **PASS** — 87 checks, 0 failures | CRC32 verification, atomic writes, backup recovery, full state |
+| Optimization & Culling JVM suite (`OptimizationTest`) | **PASS** — 36 checks, 0 failures | Frustum culling, zero-alloc TRS, frame budget, dt clamp |
+| Final QA Audit & Dual-Mode JVM suite (`FinalQATest`) | **PASS** — 129 checks, 0 failures | End-to-end audit across all 14 subsystem dimensions |
+| Total JVM test suite | **PASS** — 3,362 checks, 0 failures | Zero regressions across all 16 test suites |
+| Full Android compile (all 39 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,458,892 bytes | step [6/6] + apksigner output |
+| On-device runtime (complete dual-mode gameplay) | **NOT TESTED** | No adb in environment; physical install pending |
+
+FinalQATest groups (129 checks across 12 dimensions):
+1. **Dual-Mode Isolation & Parity**: 6 parkour buildings, extraction console, 896m open-world bounds, 10 POIs, 3 vehicles, rooftop vs terrain spawn heights, save state mode flag isolation.
+2. **Parkour Campaign Full Flow**: Walk, jog, sprint, jump, double jump, high fall damage, safety roll 0 damage mitigation, hunter enemy proximity, extraction console boundary.
+3. **Open-World 896m World & Streaming**: Bounds [-448, 448], water level, plaza height, north hills elevation, river carving below water, 3x3 active chunk loading and shift.
+4. **Walkable Building Interiors**: Safehouse dimensions, doors, floor snapping, walkable room interior, doorway unobstructed passage.
+5. **Road Network & Navigation Routing**: 33 nodes, cross-region Dijkstra shortest path, tracker initialization, waypoint arrival advance, >12m deviation auto-rerouting.
+6. **Civilian & Hostile AI Behaviors**: Civilian idle, proximity talk trigger, dialogue cycling, hostile patrol, aggro chase (<18m), safe haven 34m repulsion buffer, staggered update budget (<40m 10/10, 40-100m 2/10, >100m 0/10).
+7. **The Long Signal Story Arc & Collectibles**: 6 missions sequential completion, victory flag, 5 hidden data slates, proximity collection, counter increment.
+8. **Survival Backpack Inventory & Usables**: 2 initial slots, 5-count stacking, slot overflow spill, medkit +45 HP healing, full-health waste prevention, energy drink stamina/adrenaline boost, quest item protection.
+9. **Vehicle Driving Dynamics & Combat**: SUV and Motorcycle configurations, forward acceleration, top speed clamp, braking, reverse (-7.5 m/s), zero-speed steering lock, handbrake drift scrub, obstacle impact damage, hostile ramming damage.
+10. **3D Spatial Audio Mixing & Acoustical Calculations**: Master-channel volume composition, linear-to-dB conversion, distance attenuation, stereo panning, engine pitch modulation, cooldown gate.
+11. **Save/Load Persistence & Fault Tolerance**: Versioned snapshot serialization, atomic file save, backup rotation (.bak), automatic corruption recovery and self-healing.
+12. **Optimization Passes & Budgets**: Frustum sphere culling, zero-alloc TRS matrix elements, delta time clamping (1ms to 100ms), 60 FPS / 30 FPS frame budgets, draw distance scaling.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. North Hills elevation sample coordinate in `FinalQATest.java` was initially sampled at z=-320m (which is a foothill) instead of z=-440m (which is the high ridge >14m) → adjusted sample to `(120f, -440f)` matching terrain specifications.
+2. Corrected parameter list for `CullingOptimizer.clampDeltaTime` from single parameter to `(dt, minDt, maxDt)` in test runner.
