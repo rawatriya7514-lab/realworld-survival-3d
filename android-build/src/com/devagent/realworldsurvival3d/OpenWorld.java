@@ -119,6 +119,7 @@ public class OpenWorld {
     // ------------------------------------------------------------------
     // Chunk streaming
     // ------------------------------------------------------------------
+    public final BuildingInterior buildingInterior = new BuildingInterior();
     private final HashMap<Long, List<Obstacle>> chunkCache = new HashMap<>();
     private final List<Obstacle> global = new ArrayList<>(); // bridge + pier
     private final List<Obstacle> active = new ArrayList<>();
@@ -310,21 +311,13 @@ public class OpenWorld {
     /** Landmark buildings that must exist exactly where their POI is. */
     private void addPoiStructures(List<Obstacle> out, float x0, float z0) {
         float x1 = x0 + CHUNK_SIZE, z1 = z0 + CHUNK_SIZE;
-        // safehouse
-        if (in(210f, 60f, x0, x1, z0, z1)) {
-            addBuilding(out, 210f, 60f, 20f, 8f, 16f);
-        }
+
+        // Walkable architectural interiors (Safehouse, Workshop, Garage, Ranger Hut)
+        buildingInterior.populateChunkInteriors(out, x0, x1, z0, z1);
+
         // market
         if (in(120f, -60f, x0, x1, z0, z1)) {
             addBuilding(out, 120f, -60f, 24f, 7f, 18f);
-        }
-        // garage
-        if (in(60f, 40f, x0, x1, z0, z1)) {
-            addBuilding(out, 60f, 40f, 18f, 6f, 14f);
-        }
-        // workshop
-        if (in(-20f, -200f, x0, x1, z0, z1)) {
-            addBuilding(out, -20f, -200f, 16f, 6f, 12f);
         }
         // watchtower (tall landmark on the hills)
         if (in(120f, -360f, x0, x1, z0, z1)) {
@@ -337,10 +330,6 @@ public class OpenWorld {
             Obstacle mast = new Obstacle(Obstacle.Type.ANTENNA, 240f, h + 4f + 11f,
                     -300f, 1.2f, 22f, 1.2f);
             out.add(mast);
-        }
-        // ranger hut
-        if (in(-330f, 60f, x0, x1, z0, z1)) {
-            addBuilding(out, -330f, 60f, 10f, 4.5f, 9f);
         }
         // docks hut on the west bank
         if (in(-170f, 300f, x0, x1, z0, z1)) {

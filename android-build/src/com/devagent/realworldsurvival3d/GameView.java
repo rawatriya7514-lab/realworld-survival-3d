@@ -59,6 +59,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     public final MapViewController mapController = new MapViewController();
     public boolean mapOverlayVisible = false;
 
+    // Phase 7: Environment (8-min Day/Night cycle, weather-lite & presets)
+    public final DayNightCycle dayNight = new DayNightCycle();
+
     // Timing
     private long lastFrameTime;
     private float deltaTime;
@@ -359,6 +362,9 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             return;
         }
 
+        // Advance 8-minute Day/Night simulation
+        dayNight.update(dt);
+
         if (ui != null) {
             String goal = missionGoal;
             if (navigationTracker.hasActiveWaypoint) {
@@ -366,7 +372,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
                 goal = "Nav: " + navigationTracker.destinationName + " (" + (int) rem + "m)";
             }
             ui.setHudMission(missionTitle, goal);
-            ui.setHudStats("Region: " + OpenWorld.regionAt(player.x, player.z).display
+            ui.setHudStats(dayNight.getTimeString() + "   Region: " + OpenWorld.regionAt(player.x, player.z).display
                     + "   Score " + player.score);
             String prompt = toastTimer > 0f ? toastMessage : null;
             if (prompt == null && player.actionNotifyTimer > 0f) {
@@ -467,6 +473,11 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             applyAudioSettings();
             applyFrameBudget();
             if (worldRenderer != null) worldRenderer.setQuality(settings.graphicsQuality);
+            if (settings.graphicsQuality == GameSettings.QUALITY_PERFORMANCE) {
+                dayNight.setPreset(DayNightCycle.GraphicsPreset.LOW);
+            } else {
+                dayNight.setPreset(DayNightCycle.GraphicsPreset.HIGH);
+            }
             applyTouchSettings();
         }
 
@@ -480,7 +491,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (worldRenderer != null && touchInput != null) {
             if (activeMode == GameMode.OPEN_WORLD) {
                 worldRenderer.renderOpenWorld(gl, player, openWorld, touchInput, currentState,
-                        roadNetwork, navigationTracker, mapController, mapOverlayVisible);
+                        roadNetwork, navigationTracker, mapController, mapOverlayVisible, dayNight);
             } else {
                 worldRenderer.render(gl, player, worldMap, chasers, items, touchInput,
                         currentState, beaconPulse);

@@ -293,9 +293,44 @@ Test results (real, this session):
 Known phase-6 limitations (tracked, see KNOWN_ISSUES.md):
 - HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
-### PHASE 7 — Environment — PLANNED
-- Building interiors, day/night cycle, weather-lite, graphics presets.
-- Gate: JVM world checks.
+### PHASE 7 — Environment (2026-11-11) — DONE
+Scope: walkable building interiors with doorways and ceilings, 8-minute day/night cycle,
+dynamic atmospheric sky/fog/light uniforms, weather-lite presets, and graphics presets.
+
+What was built (all original code):
+- `DayNightCycle.java` (new, pure Java): 8-minute diurnal progression (480s);
+  continuous unit sun/moon orbiting direction vector; 4 smooth diurnal palettes
+  (Dawn, Day, Dusk, Night) with smooth cosine blending; digital 12-hour game clock
+  ("06:30 AM", "12:00 PM"); weather-lite atmospheric presets (CLEAR, OVERCAST, MISTY,
+  RAIN_LITE) with light attenuation and fog modulation; graphics presets (LOW 120m/30fps,
+  MEDIUM 180m/60fps, HIGH 260m/60fps).
+- `BuildingInterior.java` (new, pure Java): walkable architectural interiors for 4 key
+  POIs (Safehouse, Workshop, Garage, Ranger Hut); perimeter walls with physical AABB
+  collision; dedicated unobstructed doorways (>=2.4m wide x >=2.4m high) allowing
+  seamless player entry and exit; solid overhead ceiling/roof slabs providing headroom
+  and parkour roof surfaces; interior survival props (workbenches, survival cot, crates).
+- `OpenWorld.java` integration: integrates `BuildingInterior` into chunk streaming,
+  replacing monolithic building boxes at Safehouse, Workshop, Garage, and Ranger Hut.
+- `WorldRenderer.java` integration: dynamic day/night uniforms (`uSunDir`, `uLightColor`,
+  `uAmbSky`, `uAmbGround`, `uFogColor`, `uFogDensity`, `uZenith`, `uHorizon`) uploaded
+  to `worldProgram` and `skyProgram`; dynamic clear color; graphics preset draw distance.
+- `GameView.java` integration: advances `dayNight.update(dt)` every frame; displays
+  game clock in HUD stats; wires graphics quality settings to presets.
+- Tests: `tests/EnvironmentTest.java` (6 groups, 51 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**.
+  Total: **2,807 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 28 classes).
+- APK: built, 22,044,558 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 2807/0.
+
+Known phase-7 limitations (tracked, see KNOWN_ISSUES.md):
+- HunterEnemy uses single-box model (full enemy animation rig planned for Phase 8).
 
 ### PHASE 8 — AI — PLANNED
 - Civilian NPCs + hostile zones with staggered updates.

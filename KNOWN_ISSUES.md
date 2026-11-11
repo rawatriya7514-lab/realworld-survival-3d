@@ -77,3 +77,9 @@ Maintained per phase; nothing is hidden.
   rotating HUD minimap (heading straight UP), cardinal compass rim indicators,
   POI snapping, tap-to-set waypoint routing, 3D waypoint beacon beam, and fullscreen
   interactive 2D map overlay. Details: TEST_REPORT.md §Phase 6.
+- PHASE 7: 8-minute Day/Night simulation (`DayNightCycle.java`) with continuous sun/moon
+  orbital orientation, smooth diurnal atmospheric palettes (Dawn, Day, Dusk, Night),
+  weather-lite atmospheric modulation (Clear, Overcast, Misty, Rain), and graphics
+  presets (LOW/MED/HIGH); walkable architectural interiors (`BuildingInterior.java`)
+  with wide doorway openings, solid ceilings, and survival furniture props for key
+  POIs (Safehouse, Workshop, Garage, Ranger Hut). Details: TEST_REPORT.md §Phase 7.

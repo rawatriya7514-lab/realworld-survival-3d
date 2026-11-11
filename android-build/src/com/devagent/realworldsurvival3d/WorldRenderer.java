@@ -604,6 +604,8 @@ public class WorldRenderer {
         }
     }
 
+    private DayNightCycle activeDayNight = null;
+
     // ==================================================================
     // Frame render
     // ==================================================================
@@ -611,33 +613,50 @@ public class WorldRenderer {
                        List<Item> items, TouchInput touch, GameView.GameState state,
                        float beaconPulse) {
         renderCore(player, worldMap, chasers, items, touch, state, beaconPulse, null,
-                null, null, null, false);
+                null, null, null, false, null);
     }
 
     /** Open-world frame: terrain chunks + streamed obstacles, no parkour beacon. */
     public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
                                 TouchInput touch, GameView.GameState state) {
-        renderOpenWorld(gl, player, openWorld, touch, state, null, null, null, false);
+        renderOpenWorld(gl, player, openWorld, touch, state, null, null, null, false, null);
     }
 
     public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
                                 TouchInput touch, GameView.GameState state,
                                 RoadNetwork roadNetwork, NavigationTracker navTracker,
                                 MapViewController mapController, boolean mapOverlayVisible) {
+        renderOpenWorld(gl, player, openWorld, touch, state, roadNetwork, navTracker, mapController, mapOverlayVisible, null);
+    }
+
+    public void renderOpenWorld(GL10 gl, Player player, OpenWorld openWorld,
+                                TouchInput touch, GameView.GameState state,
+                                RoadNetwork roadNetwork, NavigationTracker navTracker,
+                                MapViewController mapController, boolean mapOverlayVisible,
+                                DayNightCycle dayNight) {
         renderCore(player, null, null, null, touch, state, 0f, openWorld,
-                roadNetwork, navTracker, mapController, mapOverlayVisible);
+                roadNetwork, navTracker, mapController, mapOverlayVisible, dayNight);
     }
 
     private void renderCore(Player player, WorldMap worldMap, List<HunterEnemy> chasers,
                             List<Item> items, TouchInput touch, GameView.GameState state,
                             float beaconPulse, OpenWorld openWorld,
                             RoadNetwork roadNetwork, NavigationTracker navTracker,
-                            MapViewController mapController, boolean mapOverlayVisible) {
+                            MapViewController mapController, boolean mapOverlayVisible,
+                            DayNightCycle dayNight) {
         if (!glReady) {
             init();
         }
 
-        GLES20.glClearColor(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], 1f);
+        this.activeDayNight = dayNight;
+        if (dayNight != null) {
+            GLES20.glClearColor(dayNight.fogColor[0], dayNight.fogColor[1], dayNight.fogColor[2], 1f);
+            this.farPlane = dayNight.currentPreset.drawDistance;
+            this.shadowsEnabled = dayNight.currentPreset.shadowsEnabled;
+        } else {
+            GLES20.glClearColor(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], 1f);
+            this.farPlane = 160f;
+        }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
         GLES20.glDepthFunc(GLES20.GL_LEQUAL);
@@ -818,13 +837,20 @@ public class WorldRenderer {
     // ==================================================================
     private void useWorldProgram() {
         GLES20.glUseProgram(worldProgram);
-        GLES20.glUniform3f(wLocSunDir, SUN_DIR[0], SUN_DIR[1], SUN_DIR[2]);
-        GLES20.glUniform3f(wLocLightColor, LIGHT_COLOR[0], LIGHT_COLOR[1], LIGHT_COLOR[2]);
-        GLES20.glUniform3f(wLocAmbSky, AMB_SKY[0], AMB_SKY[1], AMB_SKY[2]);
-        GLES20.glUniform3f(wLocAmbGround, AMB_GROUND[0], AMB_GROUND[1], AMB_GROUND[2]);
+        float[] sun = (activeDayNight != null) ? activeDayNight.sunDirection : SUN_DIR;
+        float[] light = (activeDayNight != null) ? activeDayNight.lightColor : LIGHT_COLOR;
+        float[] aSky = (activeDayNight != null) ? activeDayNight.ambientSky : AMB_SKY;
+        float[] aGnd = (activeDayNight != null) ? activeDayNight.ambientGround : AMB_GROUND;
+        float[] fog = (activeDayNight != null) ? activeDayNight.fogColor : FOG_COLOR;
+        float fDensity = (activeDayNight != null) ? activeDayNight.fogDensity : fogDensity;
+
+        GLES20.glUniform3f(wLocSunDir, sun[0], sun[1], sun[2]);
+        GLES20.glUniform3f(wLocLightColor, light[0], light[1], light[2]);
+        GLES20.glUniform3f(wLocAmbSky, aSky[0], aSky[1], aSky[2]);
+        GLES20.glUniform3f(wLocAmbGround, aGnd[0], aGnd[1], aGnd[2]);
         GLES20.glUniform3f(wLocCamPos, camX, camY, camZ);
-        GLES20.glUniform3f(wLocFogColor, FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2]);
-        GLES20.glUniform1f(wLocFogDensity, fogDensity);
+        GLES20.glUniform3f(wLocFogColor, fog[0], fog[1], fog[2]);
+        GLES20.glUniform1f(wLocFogDensity, fDensity);
         GLES20.glUniform1i(wLocTex, 0);
     }
 
@@ -1128,8 +1154,10 @@ public class WorldRenderer {
         float[] identity = new float[16];
         Matrix.setIdentityM(identity, 0);
         GLES20.glUniformMatrix4fv(sLocMVP, 1, false, identity, 0);
-        GLES20.glUniform3f(sLocZenith, SKY_ZENITH[0], SKY_ZENITH[1], SKY_ZENITH[2]);
-        GLES20.glUniform3f(sLocHorizon, SKY_HORIZON[0], SKY_HORIZON[1], SKY_HORIZON[2]);
+        float[] zenith = (activeDayNight != null) ? activeDayNight.skyZenith : SKY_ZENITH;
+        float[] horizon = (activeDayNight != null) ? activeDayNight.skyHorizon : SKY_HORIZON;
+        GLES20.glUniform3f(sLocZenith, zenith[0], zenith[1], zenith[2]);
+        GLES20.glUniform3f(sLocHorizon, horizon[0], horizon[1], horizon[2]);
         GLES20.glEnableVertexAttribArray(sLocPos);
         GLES20.glVertexAttribPointer(sLocPos, 2, GLES20.GL_FLOAT, false, 0, clipQuadVbo);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, 4);

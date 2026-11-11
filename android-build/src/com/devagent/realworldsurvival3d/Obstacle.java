@@ -165,4 +165,13 @@ public class Obstacle {
         return px >= (getMinX() - margin) && px <= (getMaxX() + margin) &&
                pz >= (getMinZ() - margin) && pz <= (getMaxZ() + margin);
     }
+
+    /**
+     * Checks if a 3D point is inside this obstacle AABB.
+     */
+    public boolean contains(float px, float py, float pz) {
+        return px >= getMinX() && px <= getMaxX() &&
+               py >= getMinY() && py <= getMaxY() &&
+               pz >= getMinZ() && pz <= getMaxZ();
+    }
 }

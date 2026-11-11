@@ -264,6 +264,47 @@ Defects found & fixed during this phase (real, encountered while testing):
    of their radii was 1.85*radius → upgraded button cluster spacing to 1.95*radius,
    ensuring complete pairwise disjoint separation across all buttons.
 
+## Phase 7 — Environment & Atmosphere (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior + 9 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| Total JVM test suite | **PASS** — 2,807 checks, 0 failures | Zero regressions across all 9 test suites |
+| Full Android compile (all 28 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,044,558 bytes | step [6/6] + apksigner output |
+| On-device runtime (day/night visuals, room entry) | **NOT TESTED** | No adb in environment; physical install pending |
+
+EnvironmentTest groups (51 checks):
+1. **8-minute cycle progression & clock**: 480s cycle duration; accurate 12-hour clock formatting ("12:00 PM", "06:00 PM", "12:00 AM", "08:30 AM"); day vs night state transition.
+2. **Sun orientation & lighting palettes**: Unit length normalization (len == 1.0) across all timeframes; noon sun elevation > 0.8; midnight sun elevation < -0.8; noon brightness > midnight; dusk warm red/amber horizon (R > B).
+3. **Weather-lite modulation**: CLEAR, OVERCAST, MISTY, RAIN_LITE; misty fog density > clear; light attenuation during adverse weather; playable fog bounds [0.005, 0.035].
+4. **Graphics presets**: LOW (120m, no shadows, 30 fps), MEDIUM (180m, shadows, 60 fps), HIGH (260m, 5x5 chunk streaming).
+5. **Building interiors**: 4 key interiors (Safehouse, Workshop, Garage, Ranger Hut); room center walkable; unobstructed door opening (>=2.4m wide x >=2.4m high).
+6. **Roof ceilings & containment**: Solid perimeter walls block horizontal exit; solid ceiling/roof overhead covers room and protects from falls.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. `GameSettings` uses `QUALITY_PERFORMANCE` (0) and `QUALITY_HIGH` (1) rather than
+   `GRAPHICS_LOW/GRAPHICS_HIGH` → updated `GameView.java` to map `QUALITY_PERFORMANCE`
+   to `GraphicsPreset.LOW` and `QUALITY_HIGH` to `GraphicsPreset.HIGH`.
+2. `Obstacle` lacked a 3D point containment query (`contains(px, py, pz)`) → implemented
+   exact AABB `contains` method in `Obstacle.java`.
+
 ## Phase 6 — World Map & Navigation (2026-11-11)
 
 Commands executed this session:
@@ -309,3 +350,44 @@ Defects found & fixed during this phase (real, encountered while testing):
    partial bounding circle overlap (dist=188.4px vs minSafe=199.8px) because the sum
    of their radii was 1.85*radius → upgraded button cluster spacing to 1.95*radius,
    ensuring complete pairwise disjoint separation across all buttons.
+
+## Phase 7 — Environment & Atmosphere (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior + 9 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| Total JVM test suite | **PASS** — 2,807 checks, 0 failures | Zero regressions across all 9 test suites |
+| Full Android compile (all 28 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,044,558 bytes | step [6/6] + apksigner output |
+| On-device runtime (day/night visuals, room entry) | **NOT TESTED** | No adb in environment; physical install pending |
+
+EnvironmentTest groups (51 checks):
+1. **8-minute cycle progression & clock**: 480s cycle duration; accurate 12-hour clock formatting ("12:00 PM", "06:00 PM", "12:00 AM", "08:30 AM"); day vs night state transition.
+2. **Sun orientation & lighting palettes**: Unit length normalization (len == 1.0) across all timeframes; noon sun elevation > 0.8; midnight sun elevation < -0.8; noon brightness > midnight; dusk warm red/amber horizon (R > B).
+3. **Weather-lite modulation**: CLEAR, OVERCAST, MISTY, RAIN_LITE; misty fog density > clear; light attenuation during adverse weather; playable fog bounds [0.005, 0.035].
+4. **Graphics presets**: LOW (120m, no shadows, 30 fps), MEDIUM (180m, shadows, 60 fps), HIGH (260m, 5x5 chunk streaming).
+5. **Building interiors**: 4 key interiors (Safehouse, Workshop, Garage, Ranger Hut); room center walkable; unobstructed door opening (>=2.4m wide x >=2.4m high).
+6. **Roof ceilings & containment**: Solid perimeter walls block horizontal exit; solid ceiling/roof overhead covers room and protects from falls.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. `GameSettings` uses `QUALITY_PERFORMANCE` (0) and `QUALITY_HIGH` (1) rather than
+   `GRAPHICS_LOW/GRAPHICS_HIGH` → updated `GameView.java` to map `QUALITY_PERFORMANCE`
+   to `GraphicsPreset.LOW` and `QUALITY_HIGH` to `GraphicsPreset.HIGH`.
+2. `Obstacle` lacked a 3D point containment query (`contains(px, py, pz)`) → implemented
+   exact AABB `contains` method in `Obstacle.java`.
