@@ -14,42 +14,56 @@ import java.util.Map;
 /**
  * GameAudioManager - Low-latency audio engine for REALWORLD SURVIVAL 3D.
  * Manages:
- *   - SoundPool for instantaneous parkour sound effects (footsteps, jumps, wall-runs, vaults, mantles, rolls)
+ *   - SoundPool for instantaneous sound effects (parkour, vehicle engine/horn/crash/skid, NPC speech, quest stingers, combat)
  *   - MediaPlayer for dynamic studio background music tracks
+ *   - Dynamic volume mixing (Master x Channel), pitch modulation, and spatial attenuation via AudioMixer
  */
 public class GameAudioManager {
-    public static final int SFX_FOOTSTEP = 1;
-    public static final int SFX_JUMP = 2;
-    public static final int SFX_DOUBLE_JUMP = 3;
-    public static final int SFX_WALLRUN = 4;
-    public static final int SFX_VAULT = 5;
-    public static final int SFX_LEDGE_GRAB = 6;
-    public static final int SFX_MANTLE = 7;
-    public static final int SFX_SLIDE = 8;
-    public static final int SFX_ROLL = 9;
-    public static final int SFX_HARD_LAND = 10;
-    public static final int SFX_HEAVY_BREATH = 11;
-    public static final int SFX_HEARTBEAT = 12;
-    public static final int SFX_PICKUP_DRINK = 13;
-    public static final int SFX_PICKUP_MEDKIT = 14;
-    public static final int SFX_PICKUP_TOKEN = 15;
-    public static final int SFX_CHASER_ROAR = 16;
-    public static final int SFX_LEVEL_WIN = 17;
-    public static final int SFX_GAME_OVER = 18;
+    // Re-export SFX IDs from AudioMixer
+    public static final int SFX_FOOTSTEP = AudioMixer.SFX_FOOTSTEP;
+    public static final int SFX_JUMP = AudioMixer.SFX_JUMP;
+    public static final int SFX_DOUBLE_JUMP = AudioMixer.SFX_DOUBLE_JUMP;
+    public static final int SFX_WALLRUN = AudioMixer.SFX_WALLRUN;
+    public static final int SFX_VAULT = AudioMixer.SFX_VAULT;
+    public static final int SFX_LEDGE_GRAB = AudioMixer.SFX_LEDGE_GRAB;
+    public static final int SFX_MANTLE = AudioMixer.SFX_MANTLE;
+    public static final int SFX_SLIDE = AudioMixer.SFX_SLIDE;
+    public static final int SFX_ROLL = AudioMixer.SFX_ROLL;
+    public static final int SFX_HARD_LAND = AudioMixer.SFX_HARD_LAND;
+    public static final int SFX_HEAVY_BREATH = AudioMixer.SFX_HEAVY_BREATH;
+    public static final int SFX_HEARTBEAT = AudioMixer.SFX_HEARTBEAT;
+    public static final int SFX_PICKUP_DRINK = AudioMixer.SFX_PICKUP_DRINK;
+    public static final int SFX_PICKUP_MEDKIT = AudioMixer.SFX_PICKUP_MEDKIT;
+    public static final int SFX_PICKUP_TOKEN = AudioMixer.SFX_PICKUP_TOKEN;
+    public static final int SFX_CHASER_ROAR = AudioMixer.SFX_CHASER_ROAR;
+    public static final int SFX_LEVEL_WIN = AudioMixer.SFX_LEVEL_WIN;
+    public static final int SFX_GAME_OVER = AudioMixer.SFX_GAME_OVER;
+    public static final int SFX_VEHICLE_ENGINE = AudioMixer.SFX_VEHICLE_ENGINE;
+    public static final int SFX_VEHICLE_HORN = AudioMixer.SFX_VEHICLE_HORN;
+    public static final int SFX_VEHICLE_CRASH = AudioMixer.SFX_VEHICLE_CRASH;
+    public static final int SFX_VEHICLE_SKID = AudioMixer.SFX_VEHICLE_SKID;
+    public static final int SFX_NPC_GREET = AudioMixer.SFX_NPC_GREET;
+    public static final int SFX_QUEST_COMPLETE = AudioMixer.SFX_QUEST_COMPLETE;
+    public static final int SFX_COMBAT_HIT = AudioMixer.SFX_COMBAT_HIT;
+    public static final int SFX_DATA_SLATE = AudioMixer.SFX_DATA_SLATE;
 
     private Context context;
     private SoundPool soundPool;
-    private Map<Integer, Integer> sfxMap;
+    private final Map<Integer, Integer> sfxMap = new HashMap<>();
+    private final AudioMixer audioMixer = new AudioMixer();
     private MediaPlayer musicPlayer;
+
+    private float masterVolume = 1.0f;
     private float sfxVolume = 0.85f;
     private float musicVolume = 0.65f;
+
     private int breathingStreamId = 0;
     private int heartbeatStreamId = 0;
+    private int vehicleEngineStreamId = 0;
     private boolean isMuted = false;
 
     public GameAudioManager(Context context) {
         this.context = context;
-        sfxMap = new HashMap<>();
         initSoundPool();
         loadAllSfx();
     }
@@ -61,33 +75,21 @@ public class GameAudioManager {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build();
             soundPool = new SoundPool.Builder()
-                    .setMaxStreams(12)
+                    .setMaxStreams(16)
                     .setAudioAttributes(attrs)
                     .build();
         } else {
-            soundPool = new SoundPool(12, AudioManager.STREAM_MUSIC, 0);
+            soundPool = new SoundPool(16, AudioManager.STREAM_MUSIC, 0);
         }
     }
 
     private void loadAllSfx() {
-        loadSfx(SFX_FOOTSTEP, "audio/sfx/footstep_concrete.wav");
-        loadSfx(SFX_JUMP, "audio/sfx/jump.wav");
-        loadSfx(SFX_DOUBLE_JUMP, "audio/sfx/double_jump.wav");
-        loadSfx(SFX_WALLRUN, "audio/sfx/wallrun.wav");
-        loadSfx(SFX_VAULT, "audio/sfx/vault.wav");
-        loadSfx(SFX_LEDGE_GRAB, "audio/sfx/ledge_grab.wav");
-        loadSfx(SFX_MANTLE, "audio/sfx/mantle.wav");
-        loadSfx(SFX_SLIDE, "audio/sfx/slide.wav");
-        loadSfx(SFX_ROLL, "audio/sfx/roll.wav");
-        loadSfx(SFX_HARD_LAND, "audio/sfx/hard_land.wav");
-        loadSfx(SFX_HEAVY_BREATH, "audio/sfx/heavy_breath.wav");
-        loadSfx(SFX_HEARTBEAT, "audio/sfx/heartbeat.wav");
-        loadSfx(SFX_PICKUP_DRINK, "audio/sfx/pickup_drink.wav");
-        loadSfx(SFX_PICKUP_MEDKIT, "audio/sfx/pickup_medkit.wav");
-        loadSfx(SFX_PICKUP_TOKEN, "audio/sfx/pickup_token.wav");
-        loadSfx(SFX_CHASER_ROAR, "audio/sfx/chaser_roar.wav");
-        loadSfx(SFX_LEVEL_WIN, "audio/sfx/level_win.wav");
-        loadSfx(SFX_GAME_OVER, "audio/sfx/game_over.wav");
+        for (int id = 1; id <= 26; id++) {
+            String path = AudioMixer.getAssetPath(id);
+            if (path != null) {
+                loadSfx(id, path);
+            }
+        }
     }
 
     private void loadSfx(int id, String assetPath) {
@@ -96,23 +98,95 @@ public class GameAudioManager {
             int soundId = soundPool.load(afd, 1);
             sfxMap.put(id, soundId);
         } catch (Exception e) {
-            // Asset might not be packaged yet or fallback
+            // Silently fallback if asset not yet bundled
+        }
+    }
+
+    public float getEffectiveSfxVolume() {
+        return AudioMixer.effectiveVolume(masterVolume, sfxVolume);
+    }
+
+    public float getEffectiveMusicVolume() {
+        return AudioMixer.effectiveVolume(masterVolume, musicVolume);
+    }
+
+    public void setMasterVolume(float vol) {
+        this.masterVolume = Math.max(0f, Math.min(1f, vol));
+        updateActiveStreamVolumes();
+    }
+
+    public void setSfxVolume(float vol) {
+        this.sfxVolume = Math.max(0f, Math.min(1f, vol));
+        updateActiveStreamVolumes();
+    }
+
+    public void setMusicVolume(float vol) {
+        this.musicVolume = Math.max(0f, Math.min(1f, vol));
+        if (musicPlayer != null) {
+            float eff = getEffectiveMusicVolume();
+            musicPlayer.setVolume(eff, eff);
+        }
+    }
+
+    private void updateActiveStreamVolumes() {
+        if (soundPool == null) return;
+        float effSfx = getEffectiveSfxVolume();
+        if (breathingStreamId != 0) {
+            soundPool.setVolume(breathingStreamId, effSfx * 0.7f, effSfx * 0.7f);
+        }
+        if (heartbeatStreamId != 0) {
+            soundPool.setVolume(heartbeatStreamId, effSfx * 0.9f, effSfx * 0.9f);
         }
     }
 
     public void playSfx(int sfxId) {
+        playSfx(sfxId, 1.0f, 1.0f);
+    }
+
+    public void playSfx(int sfxId, float volumeScale, float rate) {
         if (isMuted || soundPool == null) return;
+        long now = System.currentTimeMillis();
+        if (!audioMixer.canPlay(sfxId, now)) return;
+
         Integer soundId = sfxMap.get(sfxId);
         if (soundId != null) {
-            soundPool.play(soundId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+            float vol = getEffectiveSfxVolume() * Math.max(0f, Math.min(1f, volumeScale));
+            float r = Math.max(0.5f, Math.min(2.0f, rate));
+            soundPool.play(soundId, vol, vol, 1, 0, r);
+            audioMixer.recordPlay(sfxId, now);
         }
     }
 
+    /** 3D Spatial Audio playback with distance attenuation and stereo pan. */
+    public void playSpatialSfx(int sfxId, float listenerX, float listenerZ, float listenerYaw,
+                               float srcX, float srcZ, float minAudible, float maxAudible) {
+        if (isMuted || soundPool == null) return;
+        long now = System.currentTimeMillis();
+        if (!audioMixer.canPlay(sfxId, now)) return;
+
+        float distGain = AudioMixer.calculateDistanceGain(listenerX, listenerZ, srcX, srcZ, minAudible, maxAudible);
+        if (distGain <= 0.01f) return;
+
+        float pan = AudioMixer.calculateStereoPan(listenerYaw, listenerX, listenerZ, srcX, srcZ);
+        float eff = getEffectiveSfxVolume() * distGain;
+        float[] ch = AudioMixer.calculateChannelVolumes(eff, pan);
+
+        Integer soundId = sfxMap.get(sfxId);
+        if (soundId != null) {
+            soundPool.play(soundId, ch[0], ch[1], 1, 0, 1.0f);
+            audioMixer.recordPlay(sfxId, now);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Continuous audio loops (Breathing, Heartbeat, Vehicle Engine)
+    // ------------------------------------------------------------------
     public void startHeavyBreathing() {
         if (breathingStreamId != 0 || isMuted || soundPool == null) return;
         Integer soundId = sfxMap.get(SFX_HEAVY_BREATH);
         if (soundId != null) {
-            breathingStreamId = soundPool.play(soundId, sfxVolume * 0.7f, sfxVolume * 0.7f, 1, -1, 1.0f);
+            float eff = getEffectiveSfxVolume() * 0.7f;
+            breathingStreamId = soundPool.play(soundId, eff, eff, 1, -1, 1.0f);
         }
     }
 
@@ -127,7 +201,8 @@ public class GameAudioManager {
         if (heartbeatStreamId != 0 || isMuted || soundPool == null) return;
         Integer soundId = sfxMap.get(SFX_HEARTBEAT);
         if (soundId != null) {
-            heartbeatStreamId = soundPool.play(soundId, sfxVolume * 0.9f, sfxVolume * 0.9f, 2, -1, 1.0f);
+            float eff = getEffectiveSfxVolume() * 0.9f;
+            heartbeatStreamId = soundPool.play(soundId, eff, eff, 2, -1, 1.0f);
         }
     }
 
@@ -138,6 +213,40 @@ public class GameAudioManager {
         }
     }
 
+    public void startVehicleEngine() {
+        if (vehicleEngineStreamId != 0 || isMuted || soundPool == null) return;
+        Integer soundId = sfxMap.get(SFX_VEHICLE_ENGINE);
+        if (soundId != null) {
+            float eff = getEffectiveSfxVolume() * 0.40f;
+            vehicleEngineStreamId = soundPool.play(soundId, eff, eff, 3, -1, 0.70f);
+        }
+    }
+
+    public void updateVehicleEngine(float currentSpeed, float maxSpeed, boolean isOccupied) {
+        if (vehicleEngineStreamId == 0 || soundPool == null) {
+            if (isOccupied) startVehicleEngine();
+            return;
+        }
+        if (!isOccupied) {
+            stopVehicleEngine();
+            return;
+        }
+        float pitch = AudioMixer.calculateEnginePitch(currentSpeed, maxSpeed);
+        float vol = getEffectiveSfxVolume() * AudioMixer.calculateEngineVolume(currentSpeed, maxSpeed, isOccupied);
+        soundPool.setRate(vehicleEngineStreamId, pitch);
+        soundPool.setVolume(vehicleEngineStreamId, vol, vol);
+    }
+
+    public void stopVehicleEngine() {
+        if (vehicleEngineStreamId != 0 && soundPool != null) {
+            soundPool.stop(vehicleEngineStreamId);
+            vehicleEngineStreamId = 0;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Background Music (MediaPlayer)
+    // ------------------------------------------------------------------
     public void playMusic(String assetTrack) {
         stopMusic();
         try {
@@ -145,7 +254,8 @@ public class GameAudioManager {
             AssetFileDescriptor afd = context.getAssets().openFd(assetTrack);
             musicPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
             musicPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            musicPlayer.setVolume(musicVolume, musicVolume);
+            float eff = getEffectiveMusicVolume();
+            musicPlayer.setVolume(eff, eff);
             musicPlayer.setLooping(true);
             musicPlayer.prepare();
             musicPlayer.start();
@@ -166,20 +276,8 @@ public class GameAudioManager {
         }
     }
 
-    /** True when a music track is currently loaded and playable. */
     public boolean musicAvailable() {
         return musicPlayer != null;
-    }
-
-    public void setSfxVolume(float vol) {
-        this.sfxVolume = vol;
-    }
-
-    public void setMusicVolume(float vol) {
-        this.musicVolume = vol;
-        if (musicPlayer != null) {
-            musicPlayer.setVolume(musicVolume, musicVolume);
-        }
     }
 
     public void pause() {
@@ -188,6 +286,7 @@ public class GameAudioManager {
         }
         stopHeavyBreathing();
         stopHeartbeat();
+        stopVehicleEngine();
     }
 
     public void resume() {
@@ -198,6 +297,9 @@ public class GameAudioManager {
 
     public void release() {
         stopMusic();
+        stopHeavyBreathing();
+        stopHeartbeat();
+        stopVehicleEngine();
         if (soundPool != null) {
             soundPool.release();
             soundPool = null;

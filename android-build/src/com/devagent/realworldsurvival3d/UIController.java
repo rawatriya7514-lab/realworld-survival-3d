@@ -53,8 +53,8 @@ public class UIController {
     private TextView continueBtn;
 
     // Settings widgets
-    private TextView sensValue, musicValue, sfxValue, qualityValue, fpsValue, invertValue,
-            joySensValue, btnScaleValue, btnOpacityValue, leftHandedValue;
+    private TextView masterValue, sensValue, musicValue, sfxValue, qualityValue, fpsValue, invertValue,
+            joySensValue, btnScaleValue, btnOpacityValue, leftHandedValue, shadowsValue, bloomValue;
 
     // HUD elements
     private TextView hudMissionTitle, hudMissionGoal, hudStats, hudPrompt, hudBanner, hudSaved;
@@ -297,6 +297,8 @@ public class UIController {
         LinearLayout inner = new LinearLayout(activity);
         inner.setOrientation(LinearLayout.VERTICAL);
 
+        masterValue = addSlider(inner, "Master volume", settings.masterVolume,
+                new Slider() { public void set(float v) { settings.masterVolume = v; callbacks.onSettingsChanged(); } });
         musicValue = addSlider(inner, "Music volume", settings.musicVolume,
                 new Slider() { public void set(float v) { settings.musicVolume = v; callbacks.onSettingsChanged(); } });
         sfxValue = addSlider(inner, "SFX volume", settings.sfxVolume,
@@ -345,26 +347,38 @@ public class UIController {
                     }
                 });
 
-        qualityValue = addToggle(inner, "Graphics quality",
-                settings.graphicsQuality == GameSettings.QUALITY_HIGH ? "High" : "Performance",
+        qualityValue = addToggle(inner, "Graphics quality", SettingsConfig.qualityName(settings.graphicsQuality),
                 new Click() {
                     public void go() {
-                        settings.graphicsQuality = settings.graphicsQuality == GameSettings.QUALITY_HIGH
-                                ? GameSettings.QUALITY_PERFORMANCE : GameSettings.QUALITY_HIGH;
-                        String v = settings.graphicsQuality == GameSettings.QUALITY_HIGH ? "High" : "Performance";
-                        qualityValue.setText("Graphics quality  " + v);
+                        settings.graphicsQuality = SettingsConfig.cycleQuality(settings.graphicsQuality);
+                        qualityValue.setText("Graphics quality  " + SettingsConfig.qualityName(settings.graphicsQuality));
                         callbacks.onSettingsChanged();
                     }
                 });
 
-        fpsValue = addToggle(inner, "FPS limit",
-                settings.fpsLimit == GameSettings.FPS_60 ? "60" : "30",
+        fpsValue = addToggle(inner, "FPS limit", SettingsConfig.fpsName(settings.fpsLimit),
                 new Click() {
                     public void go() {
-                        settings.fpsLimit = settings.fpsLimit == GameSettings.FPS_60
-                                ? GameSettings.FPS_30 : GameSettings.FPS_60;
-                        String v = settings.fpsLimit == GameSettings.FPS_60 ? "60" : "30";
-                        fpsValue.setText("FPS limit  " + v);
+                        settings.fpsLimit = SettingsConfig.cycleFps(settings.fpsLimit);
+                        fpsValue.setText("FPS limit  " + SettingsConfig.fpsName(settings.fpsLimit));
+                        callbacks.onSettingsChanged();
+                    }
+                });
+
+        shadowsValue = addToggle(inner, "Dynamic shadows", settings.shadowsEnabled ? "On" : "Off",
+                new Click() {
+                    public void go() {
+                        settings.shadowsEnabled = !settings.shadowsEnabled;
+                        shadowsValue.setText("Dynamic shadows  " + (settings.shadowsEnabled ? "On" : "Off"));
+                        callbacks.onSettingsChanged();
+                    }
+                });
+
+        bloomValue = addToggle(inner, "Bloom & effects", settings.bloomEnabled ? "On" : "Off",
+                new Click() {
+                    public void go() {
+                        settings.bloomEnabled = !settings.bloomEnabled;
+                        bloomValue.setText("Bloom & effects  " + (settings.bloomEnabled ? "On" : "Off"));
                         callbacks.onSettingsChanged();
                     }
                 });

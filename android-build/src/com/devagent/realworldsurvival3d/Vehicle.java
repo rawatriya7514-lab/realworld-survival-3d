@@ -41,6 +41,8 @@ public class Vehicle {
     public boolean isOccupied = false;
     public boolean isEngineOn = false;
     public boolean headlightsOn = true;
+    public boolean isHandbraking = false;
+    public boolean justCollided = false;
 
     public final float width;
     public final float length;
@@ -83,6 +85,8 @@ public class Vehicle {
 
     public void update(float dt, float throttle, float steer, boolean handbrake,
                        OpenWorld openWorld, Player player) {
+        justCollided = false;
+        isHandbraking = handbrake;
         if (!isOccupied) {
             // Apply rolling friction when parked
             if (Math.abs(speed) > 0.05f) {
@@ -168,6 +172,7 @@ public class Vehicle {
                 if (!o.solid) continue;
                 if (o.containsXZ(nx, nz, width * 0.45f)) {
                     collided = true;
+                    justCollided = true;
                     // Impact damage if hitting at speed > 4 m/s
                     if (Math.abs(speed) > 4.0f) {
                         float dmg = Math.abs(speed) * 3.2f;

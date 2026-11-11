@@ -145,6 +145,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     }
 
     private void applyAudioSettings() {
+        audioManager.setMasterVolume(settings.masterVolume);
         audioManager.setMusicVolume(GameSettings.toVolume(settings.musicVolume));
         audioManager.setSfxVolume(GameSettings.toVolume(settings.sfxVolume));
     }
@@ -351,11 +352,21 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             player.yaw = -activeVehicle.yaw;
             touchInput.interactVisible = true;
 
+            // Audio: engine pitch modulation, tire skid, impact crash
+            audioManager.updateVehicleEngine(activeVehicle.speed, activeVehicle.maxSpeed, true);
+            if (activeVehicle.justCollided) {
+                audioManager.playSfx(GameAudioManager.SFX_VEHICLE_CRASH);
+            }
+            if (activeVehicle.isHandbraking && Math.abs(activeVehicle.speed) > 4.5f) {
+                audioManager.playSfx(GameAudioManager.SFX_VEHICLE_SKID);
+            }
+
             // Exit vehicle check
             if (touchInput.interactPressed) {
                 String vName = activeVehicle.name;
                 activeVehicle.exit(player, openWorld);
                 activeVehicle = null;
+                audioManager.stopVehicleEngine();
                 toastMessage = "Exited " + vName;
                 toastTimer = 2.0f;
                 touchInput.interactPressed = false;
@@ -374,6 +385,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
                 if (touchInput.interactPressed) {
                     if (nearbyVehicle.enter(player)) {
                         activeVehicle = nearbyVehicle;
+                        audioManager.startVehicleEngine();
                         toastMessage = "Driving " + nearbyVehicle.name;
                         toastTimer = 2.0f;
                         touchInput.interactPressed = false;
@@ -434,6 +446,11 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         if (missionManager.lastToast != null && toastTimer <= 0f) {
             toastMessage = missionManager.lastToast;
             toastTimer = missionManager.toastTimer;
+            if (toastMessage.startsWith("Mission") || toastMessage.contains("Completed") || toastMessage.contains("Signal Transmitted")) {
+                audioManager.playSfx(GameAudioManager.SFX_QUEST_COMPLETE);
+            } else if (toastMessage.contains("Data Slate")) {
+                audioManager.playSfx(GameAudioManager.SFX_DATA_SLATE);
+            }
             missionManager.lastToast = null;
             vibrate(35);
         }
@@ -458,6 +475,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
                 activeDialogue = nearbyCivilian.name + " (" + nearbyCivilian.role + "): \"" + speech + "\"";
                 dialogueTimer = 4.5f;
                 missionManager.onPlayerTalk(nearbyCivilian);
+                audioManager.playSfx(GameAudioManager.SFX_NPC_GREET);
                 vibrate(20);
                 touchInput.interactPressed = false;
             }
@@ -471,6 +489,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             hostile.update(dt, player, openWorld, openWorldFrameCount);
             if (oldState != HostileAI.State.DEFEATED && hostile.state == HostileAI.State.DEFEATED) {
                 missionManager.onHostileDefeated(hostile);
+                audioManager.playSfx(GameAudioManager.SFX_COMBAT_HIT);
             }
         }
 
@@ -590,11 +609,13 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             settingsDirty = false;
             applyAudioSettings();
             applyFrameBudget();
-            if (worldRenderer != null) worldRenderer.setQuality(settings.graphicsQuality);
-            if (settings.graphicsQuality == GameSettings.QUALITY_PERFORMANCE) {
-                dayNight.setPreset(DayNightCycle.GraphicsPreset.LOW);
-            } else {
-                dayNight.setPreset(DayNightCycle.GraphicsPreset.HIGH);
+            if (worldRenderer != null) {
+                worldRenderer.setQuality(settings.graphicsQuality);
+                worldRenderer.setShadowsEnabled(settings.shadowsEnabled);
+                worldRenderer.setBloomEnabled(settings.bloomEnabled);
+            }
+            if (dayNight != null) {
+                dayNight.setPreset(settings.getGraphicsPreset());
             }
             applyTouchSettings();
         }

@@ -42,18 +42,33 @@ public class WorldRenderer {
     private float fogDensity = 0.0042f;
     private float farPlane = 420f;
     private boolean shadowsEnabled = true;
+    private boolean userShadowsEnabled = true;
+    private boolean bloomEnabled = true;
 
     public void setQuality(int q) {
         quality = q;
-        if (q == QUALITY_PERFORMANCE) {
+        if (q == SettingsConfig.QUALITY_LOW) {
             fogDensity = 0.0075f;   // heavier fog hides the shorter draw distance
-            farPlane = 230f;
+            farPlane = 160f;
             shadowsEnabled = false;
+        } else if (q == SettingsConfig.QUALITY_MEDIUM) {
+            fogDensity = 0.0055f;
+            farPlane = 260f;
+            shadowsEnabled = userShadowsEnabled;
         } else {
             fogDensity = 0.0042f;
             farPlane = 420f;
-            shadowsEnabled = true;
+            shadowsEnabled = userShadowsEnabled;
         }
+    }
+
+    public void setShadowsEnabled(boolean enabled) {
+        this.userShadowsEnabled = enabled;
+        this.shadowsEnabled = enabled;
+    }
+
+    public void setBloomEnabled(boolean enabled) {
+        this.bloomEnabled = enabled;
     }
 
     // ------------------------------------------------------------------
@@ -661,10 +676,11 @@ public class WorldRenderer {
         if (dayNight != null) {
             GLES20.glClearColor(dayNight.fogColor[0], dayNight.fogColor[1], dayNight.fogColor[2], 1f);
             this.farPlane = dayNight.currentPreset.drawDistance;
-            this.shadowsEnabled = dayNight.currentPreset.shadowsEnabled;
+            this.shadowsEnabled = userShadowsEnabled && dayNight.currentPreset.shadowsEnabled;
         } else {
             GLES20.glClearColor(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], 1f);
             this.farPlane = 160f;
+            this.shadowsEnabled = userShadowsEnabled;
         }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);

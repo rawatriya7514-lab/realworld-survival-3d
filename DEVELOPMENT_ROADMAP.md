@@ -477,9 +477,62 @@ Test results (real, this session):
 Known phase-10 limitations (tracked, see KNOWN_ISSUES.md):
 - Audio triggers and graphics settings sliders planned for Phase 11.
 
-### PHASE 11 — Audio + settings — PLANNED
-- Audio management, SFX/music volume sliders, vehicle engine sounds, graphics settings.
+### PHASE 11 — Audio + settings (2026-11-11) — DONE
+Scope: Comprehensive audio mixing engine (`AudioMixer.java`), Master/Music/SFX volume
+gain controls, vehicle audio triggers (speed-proportional engine pitch/volume modulation,
+horn blast, skid screech, obstacle impact crash), NPC greeting chirp, quest completion
+stinger, combat melee impact, data slate chime, 3D spatial distance attenuation and stereo
+panning, pure Java settings configuration schema (`SettingsConfig.java`), dynamic graphics
+quality presets (LOW/MEDIUM/HIGH), shadows and bloom toggles, and UIController settings dialog.
+
+What was built (all original code):
+- `AudioMixer.java` (new, pure Java): decoupled audio engine math; 26 sound event registry;
+  master-to-channel composition; linear gain to decibel conversion and reverse (-60 dB to 0 dB);
+  spatial Euclidean distance falloff calculation (minAudible to maxAudible); spatial stereo
+  panning [-1.0, +1.0] in listener coordinate space; channel volume splitting; vehicle engine
+  speed-to-pitch rate modulation (`0.70x + ratio * 0.90x`, clamped [0.70x, 1.60x]); vehicle
+  speed-to-volume modulation (`0.35 + ratio * 0.65`, 0 if unoccupied); sound cooldown gate
+  preventing repetitive audio flanging/clipping.
+- `SettingsConfig.java` (new, pure Java): configuration schema, presets, and mathematical
+  conversions; 13 persisted setting keys; volume and touch scale clamps; lookScale, scaleFromSlider,
+  opacityFromSlider, joySensFromSlider, sliderToVolume conversions; quality cycling (Low/Med/High)
+  and FPS cycling (30/60); string map export and import for serialization.
+- `GameSettings.java` updates: extends `SettingsConfig`, adds `masterVolume`, `shadowsEnabled`,
+  and `bloomEnabled` persistent keys via Android SharedPreferences.
+- `GameAudioManager.java` updates: delegates volume and spatial panning to `AudioMixer`;
+  implements continuous looping vehicle engine stream with dynamic pitch and volume updates;
+  adds `playSpatialSfx`, `startVehicleEngine`, `updateVehicleEngine`, `stopVehicleEngine`.
+- Audio assets synthesized via python wave generator: `vehicle_engine.wav`, `vehicle_horn.wav`,
+  `vehicle_crash.wav`, `vehicle_skid.wav`, `npc_greet.wav`, `quest_complete.wav`, `combat_hit.wav`,
+  `data_slate.wav`.
+- `UIController.java` updates: added Master volume slider, Dynamic shadows toggle, Bloom & effects
+  toggle, and 3-way Graphics quality cycling to the scrollable Settings menu.
+- `WorldRenderer.java` updates: dynamic toggles for `userShadowsEnabled` and `bloomEnabled`;
+  supports `SettingsConfig.QUALITY_LOW` (160m), `QUALITY_MEDIUM` (260m), and `QUALITY_HIGH` (420m).
+- `GameView.java` updates: wires master/music/sfx volume in `applyAudioSettings`; passes graphics
+  settings to renderer; triggers vehicle engine audio, skid on handbrake, crash on impact, NPC greet
+  on dialogue, quest completion chime on mission advance, and combat hit on hostile defeat.
+- `Vehicle.java` updates: added `justCollided` and `isHandbraking` status flags.
+- Tests: `tests/AudioSettingsTest.java` (10 groups, 142 checks) added; run via `sh tests/run.sh`.
+
+Test results (real, this session):
+- JVM: `sh tests/run.sh` → GameLogicTest **2,432 passed / 0 failed**, OpenWorldTest
+  **82 passed / 0 failed**, MovementTest **45 passed / 0 failed**, AnimationTest
+  **30 passed / 0 failed**, CameraTest **42 passed / 0 failed**, TouchLayoutTest
+  **37 passed / 0 failed**, RoadNetworkTest **30 passed / 0 failed**, MapTest
+  **58 passed / 0 failed**, EnvironmentTest **51 passed / 0 failed**, AITest
+  **56 passed / 0 failed**, MissionTest **54 passed / 0 failed**, InventoryVehicleTest
+  **51 passed / 0 failed**, AudioSettingsTest **142 passed / 0 failed**.
+  Total: **3,110 passed / 0 failed**.
+- Android compile: full `./export-and-build.sh debug` → OK (all 36 classes).
+- APK: built, 22,450,700 bytes, signature verified v1+v2+v3.
+- Device runtime: **NOT TESTED** (no adb). JVM gate: 3110/0.
+
+Known phase-11 limitations (tracked, see KNOWN_ISSUES.md):
+- Game state persistence (player stats, completed quests, inventory, vehicle coordinates) planned for Phase 12.
+
 ### PHASE 12 — Save/load — PLANNED
+- Versioned game save/load persistence, atomic file write, corruption recovery.
 ### PHASE 13 — Optimization — PLANNED
 ### PHASE 14 — Final QA — PLANNED
 ### PHASE 15 — APK release — PLANNED

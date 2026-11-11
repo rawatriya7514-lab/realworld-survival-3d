@@ -526,3 +526,51 @@ Defects found & fixed during this phase (real, encountered while testing):
 1. Vehicle steering initially rotated yaw even when completely stationary (`speed = 0`) → gated steering by `turnFactor = Math.min(1.0f, Math.abs(speed) / 4.0f)`.
 2. Vehicle obstacle collision test failed because `world.recomputeActive` had not been invoked at vehicle spawn position to load the chunk's obstacles → called `world.recomputeActive(210f, 45f)` and oriented vehicle toward obstacle.
 3. `WorldRenderer.java` attempted to use non-existent texture names `TEX_BUILDING` / `TEX_WINDOW` for vehicle body → redirected to existing slots `TEX_CONCRETE`, `TEX_ROOF`, and `TEX_RUST` with tinting.
+
+## Phase 11 — Audio & Settings (2026-11-11)
+
+Commands executed this session:
+- `sh tests/run.sh` (JVM gate: compiles Obstacle, Terrain, OpenWorld, WorldMap,
+  CharacterAnimator, Player, HunterEnemy, Item, CameraRig, TouchLayout,
+  RoadNetwork, NavigationTracker, MapViewController, DayNightCycle,
+  BuildingInterior, CivilianNPC, HostileAI, Mission, MissionManager,
+  Inventory, Vehicle, AudioMixer, SettingsConfig + 13 test mains)
+- `./export-and-build.sh debug` (full Android build: javac → d8 → aapt2 →
+  link → dex inject → zipalign → apksigner)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Parkour regression JVM suite (`GameLogicTest`) | **PASS** — 2,432 checks, 0 failures | Rooftop parkour mechanics fully intact |
+| Open-world foundation JVM suite (`OpenWorldTest`) | **PASS** — 82 checks, 0 failures | Terrain, streaming, POIs, deep-water rules intact |
+| Movement state machine JVM suite (`MovementTest`) | **PASS** — 45 checks, 0 failures | Locomotion, step-up, ground snap, slopes intact |
+| Animation state machine JVM suite (`AnimationTest`) | **PASS** — 30 checks, 0 failures | Gait frequencies, breathing, poses, blending intact |
+| Camera system JVM suite (`CameraTest`) | **PASS** — 42 checks, 0 failures | Target tracking, crouch adaptation, raycast pull-in intact |
+| Touch layout & geometry JVM suite (`TouchLayoutTest`) | **PASS** — 37 checks, 0 failures | Button scaling, opacity, left-handed mode intact |
+| Road network & routing JVM suite (`RoadNetworkTest`) | **PASS** — 30 checks, 0 failures | Dijkstra shortest paths, edge blocking, deviation rerouting |
+| Map projection & viewport JVM suite (`MapTest`) | **PASS** — 58 checks, 0 failures | World<->Screen projection, pan/zoom, minimap, POI snap |
+| Environment & interiors JVM suite (`EnvironmentTest`) | **PASS** — 51 checks, 0 failures | Day/night cycle, sun math, weather, presets, walkable rooms |
+| AI Entities & Staggered Updates JVM suite (`AITest`) | **PASS** — 56 checks, 0 failures | Civilian dialogues, safe zone aversion, combat, throttling |
+| Story Missions JVM suite (`MissionTest`) | **PASS** — 54 checks, 0 failures | 6 quests, data slates, waypoints, rewards, retry |
+| Inventory & Vehicles JVM suite (`InventoryVehicleTest`) | **PASS** — 51 checks, 0 failures | Stacking, consumables, vehicle physics, roadkill ramming |
+| Audio & Settings JVM suite (`AudioSettingsTest`) | **PASS** — 142 checks, 0 failures | Mixing, dB conversions, 3D spatial pan, engine pitch, config |
+| Total JVM test suite | **PASS** — 3,110 checks, 0 failures | Zero regressions across all 13 test suites |
+| Full Android compile (all 36 classes) | **PASS** — 0 errors | `export-and-build.sh debug` step [1/6] |
+| APK build + sign + verify | **PASS** — v1+v2+v3 verified, 22,450,700 bytes | step [6/6] + apksigner output |
+| On-device runtime (audio playback, settings menu) | **NOT TESTED** | No adb in environment; physical install pending |
+
+AudioSettingsTest groups (142 checks):
+1. **AudioMixer volume math & decibels**: Master-channel volume composition; zero master full silence; linear gain to decibel conversion and reverse (-60 dB to 0 dB round trip).
+2. **AudioMixer spatial distance attenuation**: Full gain within minAudible radius; 0 gain beyond maxAudible radius; linear gradient and monotonic attenuation over distance.
+3. **AudioMixer spatial stereo panning**: Front center pan; left/right azimuth orientation; listener heading rotation; channel volume split.
+4. **AudioMixer vehicle engine modulation**: Speed-to-pitch rate curve (0.70x idle to 1.60x top speed); speed-to-volume curve (0.35 idle to 1.00 max); unoccupied vehicle silence.
+5. **AudioMixer cooldown rate limiting**: Interval gating per SFX type (footstep 180ms, crash 300ms); unthrottled SFX bypass; cooldown reset.
+6. **AudioMixer sound registry & asset paths**: 26 SFX IDs mapped to valid audio/sfx/*.wav paths; loop vs one-shot classifications.
+7. **SettingsConfig defaults & clamping**: Default configuration values; boundary clamping for volume, sensitivity, scales, opacity, quality, and FPS.
+8. **SettingsConfig conversions & presets**: Look scale calculation; slider-to-scale, slider-to-opacity, slider-to-joystick-sensitivity round trips; quality and FPS cycling; DayNight preset mapping.
+9. **SettingsConfig string map serialization**: 13-key map export and safe parsing/import with clamp recovery.
+10. **Vehicle audio flags**: Handbrake state tracking and solid obstacle collision detection flag.
+
+Defects found & fixed during this phase (real, encountered while testing):
+1. In `AudioSettingsTest.java`, initial vehicle collision test executed a small dt loop from 0 speed following a handbrake engagement, stopping short of the wall → set forward test speed to 18.0 m/s with direct wall displacement.
+2. In `GameSettings.java`, needed backward-compatibility with existing code expecting `QUALITY_PERFORMANCE` → maintained alias mapped to `QUALITY_LOW`.
+3. In `WorldRenderer.java`, `shadowsEnabled` was previously overwritten unconditionally by `DayNightCycle` preset → added `userShadowsEnabled` guard so user settings override preset state.
