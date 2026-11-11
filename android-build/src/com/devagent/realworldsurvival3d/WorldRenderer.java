@@ -97,7 +97,8 @@ public class WorldRenderer {
     private int hLocPos, hLocMVP, hLocColor;
 
     // Sky shader locations
-    private int sLocPos, sLocMVP, sLocZenith, sLocHorizon;
+    private int sLocPos, sLocMVP, sLocZenith, sLocHorizon, sLocInvVP, sLocSunDir, sLocSunColor;
+    private final float[] invVpMatrix = new float[16];
 
     // ------------------------------------------------------------------
     // Geometry
@@ -264,16 +265,25 @@ public class WorldRenderer {
                 "void main() {\n" +
                 "  vec4 base = uUseTex ? texture2D(uTex, vUV) * uTint : uTint;\n" +
                 "  vec3 n = normalize(vNormal);\n" +
-                "  float ndl = max(dot(n, -uSunDir), 0.0);\n" +
-                "  float halfLambert = ndl * 0.82 + 0.18;\n" +
-                "  vec3 amb = mix(uAmbGround, uAmbSky, clamp(n.y * 0.5 + 0.5, 0.0, 1.0));\n" +
+                "  vec3 L = normalize(-uSunDir);\n" +
                 "  vec3 V = normalize(uCamPos - vWorldPos);\n" +
-                "  vec3 H = normalize(V + (-uSunDir));\n" +
-                "  float spec = pow(max(dot(n, H), 0.0), 28.0) * uSpec;\n" +
-                "  vec3 col = base.rgb * (uLightColor * halfLambert + amb) + vec3(spec);\n" +
+                "  vec3 H = normalize(V + L);\n" +
+                "  float ndl = max(dot(n, L), 0.0);\n" +
+                "  float halfLambert = ndl * 0.78 + 0.22;\n" +
+                "  vec3 amb = mix(uAmbGround, uAmbSky, clamp(n.y * 0.5 + 0.5, 0.0, 1.0));\n" +
+                "  float nDotV = max(dot(n, V), 0.0);\n" +
+                "  float fresnel = pow(1.0 - nDotV, 3.2) * 0.45;\n" +
+                "  float specPow = 24.0 + uSpec * 48.0;\n" +
+                "  float spec = pow(max(dot(n, H), 0.0), specPow) * (uSpec * 1.5 + fresnel * 0.5);\n" +
+                "  vec3 diffuse = base.rgb * (uLightColor * halfLambert + amb);\n" +
+                "  vec3 specular = uLightColor * spec;\n" +
+                "  vec3 rim = amb * fresnel * 0.5;\n" +
+                "  vec3 col = diffuse + specular + rim;\n" +
                 "  float d = length(uCamPos - vWorldPos);\n" +
                 "  float fog = 1.0 - exp(-uFogDensity * uFogDensity * d * d);\n" +
-                "  col = mix(col, uFogColor, clamp(fog, 0.0, 1.0));\n" +
+                "  float sunScatter = pow(max(dot(V, L), 0.0), 6.0) * 0.40;\n" +
+                "  vec3 haze = mix(uFogColor, uLightColor, sunScatter);\n" +
+                "  col = mix(col, haze, clamp(fog, 0.0, 1.0));\n" +
                 "  gl_FragColor = vec4(col, base.a * uAlpha);\n" +
                 "}\n";
 
@@ -318,22 +328,38 @@ public class WorldRenderer {
             hLocColor = GLES20.glGetUniformLocation(hudProgram, "uColor");
         }
 
-        // ---------- Sky shader ----------
-        String svs = "uniform mat4 uMVP;\n" +
+        // ---------- Dynamic Sky dome shader (with 3D sun disk, corona glow, cirrus clouds) ----------
+        String svs = "uniform mat4 uInvVP;\n" +
                 "attribute vec2 aPosition;\n" +
-                "varying float vY;\n" +
+                "varying vec3 vRayDir;\n" +
                 "void main() {\n" +
-                "  vY = aPosition.y * 0.5 + 0.5;\n" +
-                "  gl_Position = uMVP * vec4(aPosition, 0.999, 1.0);\n" +
+                "  vec4 pNear = uInvVP * vec4(aPosition, -1.0, 1.0);\n" +
+                "  vec4 pFar  = uInvVP * vec4(aPosition,  1.0, 1.0);\n" +
+                "  vRayDir = pFar.xyz / pFar.w - pNear.xyz / pNear.w;\n" +
+                "  gl_Position = vec4(aPosition, 0.9999, 1.0);\n" +
                 "}\n";
         String sfs = "precision mediump float;\n" +
                 "uniform vec3 uZenith;\n" +
                 "uniform vec3 uHorizon;\n" +
-                "varying float vY;\n" +
+                "uniform vec3 uSunDir;\n" +
+                "uniform vec3 uSunColor;\n" +
+                "varying vec3 vRayDir;\n" +
                 "void main() {\n" +
-                "  vec3 col = mix(uHorizon, uZenith, pow(clamp(vY, 0.0, 1.0), 0.75));\n" +
-                "  col += uHorizon * exp(-vY * 7.0) * 0.55;\n" + // horizon glow band
-                "  gl_FragColor = vec4(col, 1.0);\n" +
+                "  vec3 dir = normalize(vRayDir);\n" +
+                "  float elev = dir.y;\n" +
+                "  float hFactor = exp(-max(elev, 0.0) * 4.2);\n" +
+                "  vec3 sky = mix(uZenith, uHorizon, clamp(hFactor, 0.0, 1.0));\n" +
+                "  float haze = exp(-abs(elev) * 14.0) * 0.45;\n" +
+                "  sky = mix(sky, uHorizon * 1.15, haze);\n" +
+                "  vec3 sunNorm = normalize(-uSunDir);\n" +
+                "  float sDot = max(dot(dir, sunNorm), 0.0);\n" +
+                "  float sDisc = smoothstep(0.9982, 0.9997, sDot) * 2.2;\n" +
+                "  float sCorona = pow(sDot, 12.0) * 0.55 + pow(sDot, 3.5) * 0.25;\n" +
+                "  vec3 sLight = (uSunColor * 1.25 + vec3(0.25, 0.18, 0.08)) * (sDisc + sCorona);\n" +
+                "  float cNoise = sin(dir.x * 7.0 + dir.z * 5.0) * cos(dir.x * 11.0 - dir.z * 6.0);\n" +
+                "  float cLayer = smoothstep(0.25, 0.75, cNoise) * clamp(elev * 2.0, 0.0, 0.35);\n" +
+                "  sky = mix(sky, vec3(1.0, 0.98, 0.95), cLayer);\n" +
+                "  gl_FragColor = vec4(sky + sLight, 1.0);\n" +
                 "}\n";
         int svsId = compile(GLES20.GL_VERTEX_SHADER, svs, "sky-vs");
         int sfsId = compile(GLES20.GL_FRAGMENT_SHADER, sfs, "sky-fs");
@@ -343,6 +369,9 @@ public class WorldRenderer {
             sLocMVP = GLES20.glGetUniformLocation(skyProgram, "uMVP");
             sLocZenith = GLES20.glGetUniformLocation(skyProgram, "uZenith");
             sLocHorizon = GLES20.glGetUniformLocation(skyProgram, "uHorizon");
+            sLocInvVP = GLES20.glGetUniformLocation(skyProgram, "uInvVP");
+            sLocSunDir = GLES20.glGetUniformLocation(skyProgram, "uSunDir");
+            sLocSunColor = GLES20.glGetUniformLocation(skyProgram, "uSunColor");
         }
     }
 
@@ -508,33 +537,64 @@ public class WorldRenderer {
         int[] px = new int[S * S];
         for (int y = 0; y < S; y++) {
             int ty = (y < T) ? 1 : 0;   // bitmap band -> GL tile row
+            int localY = y % T;
             for (int x = 0; x < S; x++) {
                 int tx = x / T;
                 int tile = tx + ty * 2; // matches Terrain.TILE_* ordering
-                float n = hash2(x, y);
+                int localX = x % T;
+                float n1 = hash2(x, y);
                 float n2 = hash2(x * 3 + 7, y * 5 + 11);
+                float n3 = hash2(x / 4, y / 4);
+                float fbm = n1 * 0.20f + n2 * 0.35f + n3 * 0.45f;
                 float r, g, b;
                 switch (tile) {
-                    case Terrain.TILE_ROCK:
-                        r = 0.40f + 0.16f * n; g = 0.38f + 0.14f * n; b = 0.36f + 0.12f * n;
-                        if (n2 > 0.8f) { r += 0.06f; g += 0.06f; b += 0.05f; }
+                    case Terrain.TILE_ROCK: {
+                        // Sedimentary strata layers with granite striations
+                        float strata = (float) Math.sin(localY * 0.16f + n3 * 4.0f) * 0.08f;
+                        float val = 0.36f + 0.18f * fbm + strata;
+                        if (n1 > 0.88f) val *= 0.75f; // cracks / fissures
+                        r = val * 1.05f; g = val; b = val * 0.95f;
                         break;
-                    case Terrain.TILE_SAND:
-                        r = 0.72f + 0.10f * n; g = 0.64f + 0.10f * n; b = 0.44f + 0.08f * n;
-                        if (n2 > 0.9f) { r += 0.05f; g += 0.05f; }
+                    }
+                    case Terrain.TILE_SAND: {
+                        // Wind-blown sand ripples with warm amber tint
+                        float ripple = (float) Math.sin(localX * 0.12f + localY * 0.07f + n3 * 2.5f) * 0.06f;
+                        r = 0.74f + 0.12f * fbm + ripple;
+                        g = 0.65f + 0.10f * fbm + ripple;
+                        b = 0.44f + 0.08f * fbm;
                         break;
-                    case Terrain.TILE_ASPHALT:
-                        r = 0.13f + 0.05f * n; g = 0.13f + 0.05f * n; b = 0.15f + 0.05f * n;
-                        if (n2 > 0.92f) { r += 0.10f; g += 0.10f; b += 0.10f; }
+                    }
+                    case Terrain.TILE_ASPHALT: {
+                        // Real asphalt highway texture with yellow center divider and white edge markings
+                        float asphaltBase = 0.15f + 0.05f * fbm;
+                        // Center double yellow line (localX around 128)
+                        if ((localX >= 123 && localX <= 126) || (localX >= 130 && localX <= 133)) {
+                            r = 0.95f; g = 0.78f; b = 0.10f;
+                        } else if (localX >= 127 && localX <= 129) {
+                            // Gap between double lines
+                            r = asphaltBase; g = asphaltBase; b = asphaltBase + 0.02f;
+                        } else if ((localX >= 14 && localX <= 19) || (localX >= 236 && localX <= 241)) {
+                            // White edge shoulder lines
+                            r = 0.90f; g = 0.90f; b = 0.92f;
+                        } else {
+                            r = asphaltBase; g = asphaltBase; b = asphaltBase + 0.02f;
+                            if (n1 > 0.94f) { r += 0.08f; g += 0.08f; b += 0.08f; } // gravel speck
+                        }
                         break;
-                    default: // grass
-                        r = 0.26f + 0.09f * n; g = 0.40f + 0.13f * n; b = 0.17f + 0.07f * n;
-                        if (n2 > 0.82f) { r *= 0.8f; g *= 0.85f; }
+                    }
+                    default: { // grass
+                        // Multiscale vibrant meadow grass with mossy gradients
+                        r = 0.22f + 0.10f * fbm;
+                        g = 0.42f + 0.16f * fbm;
+                        b = 0.15f + 0.08f * fbm;
+                        if (n2 > 0.80f) { r *= 0.85f; g *= 0.88f; } // lush patch
+                        if (n1 > 0.88f) { r += 0.04f; g += 0.05f; } // golden blades
                         break;
+                    }
                 }
-                int ir = (int) (Math.min(1f, r) * 255f);
-                int ig = (int) (Math.min(1f, g) * 255f);
-                int ib = (int) (Math.min(1f, b) * 255f);
+                int ir = (int) (Math.max(0f, Math.min(1f, r)) * 255f);
+                int ig = (int) (Math.max(0f, Math.min(1f, g)) * 255f);
+                int ib = (int) (Math.max(0f, Math.min(1f, b)) * 255f);
                 px[y * S + x] = 0xFF000000 | (ir << 16) | (ig << 8) | ib;
             }
         }
@@ -711,6 +771,7 @@ public class WorldRenderer {
         Matrix.perspectiveM(projMatrix, 0, fov, aspect, 0.4f, farPlane);
         setupCamera(player, worldMap, openWorld);
         Matrix.multiplyMM(vpMatrix, 0, projMatrix, 0, viewMatrix, 0);
+        Matrix.invertM(invVpMatrix, 0, vpMatrix, 0);
 
         // ---- Sky ----
         drawSky();
@@ -994,12 +1055,30 @@ public class WorldRenderer {
                 spec = 0.15f;
                 break;
             case BUILDING:
-            default:
+            default: {
                 tex = TEX_CONCRETE;
                 uvx = Math.max(1f, o.width / 5f);
                 uvy = Math.max(1f, o.height / 5f);
-                spec = 0.05f;
-                break;
+                spec = 0.08f;
+                float[] model = Mat4.trs(o.x, o.y, o.z, 0f, o.width, o.height, o.depth);
+                drawCubeModel(model, tex, r, g, b, 1f, uvx, uvy, spec, 1f);
+
+                // Architectural roof parapet / cornice rim
+                float topY = o.y + o.height * 0.5f;
+                float[] roofLedge = Mat4.trs(o.x, topY + 0.18f, o.z, 0f, o.width + 0.6f, 0.36f, o.depth + 0.6f);
+                drawCubeModel(roofLedge, TEX_ROOF, 0.20f, 0.22f, 0.25f, 1f, o.width / 4f, 1f, 0.20f, 1f);
+
+                // Skyscraper rooftop mechanical utilities & red warning beacon
+                if (o.width >= 14f && o.height >= 16f) {
+                    float[] penthouse = Mat4.trs(o.x, topY + 1.2f, o.z, 0f, o.width * 0.35f, 2.0f, o.depth * 0.35f);
+                    drawCubeModel(penthouse, TEX_CONCRETE, r * 0.85f, g * 0.85f, b * 0.85f, 1f, 2f, 1f, 0.1f, 1f);
+                    float[] mast = Mat4.trs(o.x, topY + 3.8f, o.z, 0f, 0.25f, 3.2f, 0.25f);
+                    drawCubeModel(mast, TEX_RUST, 0.75f, 0.75f, 0.80f, 1f, 1f, 3f, 0.6f, 1f);
+                    float[] beacon = Mat4.trs(o.x, topY + 5.5f, o.z, 0f, 0.38f, 0.38f, 0.38f);
+                    drawCubeModelNoTex(beacon, 1.0f, 0.15f, 0.12f, 1f, 1f);
+                }
+                return;
+            }
             case WALLRUN_PANEL:
                 tex = TEX_NEON;
                 uvx = Math.max(1f, o.width / 6f);
@@ -1076,7 +1155,14 @@ public class WorldRenderer {
         GLES20.glEnable(GLES20.GL_BLEND);
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
         GLES20.glDepthMask(false);
-        drawBoxNoTex(o, 0.16f, 0.36f, 0.55f, 0.62f, 0.5f);
+        // Base deep water body
+        drawBoxNoTex(o, 0.08f, 0.26f, 0.48f, 0.72f, 0.90f);
+        // Animated glistening wave ripple layer
+        float waveTime = (System.currentTimeMillis() % 100000) * 0.0025f;
+        float waveOffset = (float) Math.sin(waveTime + o.x * 0.1f) * 0.04f;
+        float topY = o.getMaxY() + waveOffset;
+        float[] surfaceWave = Mat4.trs(o.x, topY, o.z, 0f, o.width, 0.10f, o.depth);
+        drawCubeModelNoTex(surfaceWave, 0.22f, 0.60f, 0.82f, 0.35f, 0.98f);
         GLES20.glDepthMask(true);
         GLES20.glDisable(GLES20.GL_BLEND);
     }
@@ -1125,54 +1211,109 @@ public class WorldRenderer {
         float rightX = (float) Math.cos(rad), rightZ = (float) Math.sin(rad);
 
         if (v.type == Vehicle.Type.SUV) {
-            // Main SUV Body
-            drawCube(v.x, v.y + 0.60f, v.z, v.yaw, 2.0f, 0.65f, 4.0f,
-                    TEX_CONCRETE, 0.22f, 0.38f, 0.65f, 1f, 1f, 1f, 0.3f, 1f);
-            // Cabin / windows
-            drawCube(v.x, v.y + 1.25f, v.z - 0.2f, v.yaw, 1.7f, 0.65f, 2.2f,
-                    TEX_ROOF, 0.15f, 0.22f, 0.30f, 1f, 1f, 1f, 0.6f, 1f);
-            // Wheels
+            // Lower chassis & bumper
+            drawCube(v.x, v.y + 0.35f, v.z, v.yaw, 2.05f, 0.30f, 4.2f,
+                    TEX_ROOF, 0.12f, 0.13f, 0.15f, 1f, 1f, 1f, 0.25f, 1f);
+            // Main SUV Body with rich metallic cobalt finish
+            drawCube(v.x, v.y + 0.72f, v.z, v.yaw, 2.0f, 0.52f, 3.9f,
+                    TEX_CONCRETE, 0.16f, 0.40f, 0.78f, 1f, 1f, 1f, 0.75f, 1f);
+            // Front chrome grille
+            float gx = v.x + fwdX * 1.95f, gz = v.z + fwdZ * 1.95f;
+            drawCube(gx, v.y + 0.62f, gz, v.yaw, 1.6f, 0.30f, 0.22f,
+                    TEX_RUST, 0.85f, 0.88f, 0.92f, 1f, 1f, 1f, 0.85f, 1f);
+            // Glass cabin with tinted windows
+            float cx = v.x - fwdX * 0.25f, cz = v.z - fwdZ * 0.25f;
+            drawCube(cx, v.y + 1.28f, cz, v.yaw, 1.72f, 0.62f, 2.3f,
+                    TEX_ROOF, 0.06f, 0.10f, 0.15f, 1f, 1f, 1f, 0.95f, 1f);
+            // Roof rack rails
+            float rx1 = v.x + rightX * 0.75f - fwdX * 0.25f, rz1 = v.z + rightZ * 0.75f - fwdZ * 0.25f;
+            float rx2 = v.x - rightX * 0.75f - fwdX * 0.25f, rz2 = v.z - rightZ * 0.75f - fwdZ * 0.25f;
+            drawCube(rx1, v.y + 1.62f, rz1, v.yaw, 0.08f, 0.08f, 2.1f,
+                    TEX_RUST, 0.22f, 0.22f, 0.24f, 1f, 1f, 1f, 0.5f, 1f);
+            drawCube(rx2, v.y + 1.62f, rz2, v.yaw, 0.08f, 0.08f, 2.1f,
+                    TEX_RUST, 0.22f, 0.22f, 0.24f, 1f, 1f, 1f, 0.5f, 1f);
+            // 4 Wheels: Rubber tires + Silver alloy hubcaps
             float[][] wheelOffsets = {
-                    {0.95f, 1.3f},   // front-right
-                    {-0.95f, 1.3f},  // front-left
-                    {0.95f, -1.3f},  // rear-right
-                    {-0.95f, -1.3f}  // rear-left
+                    {1.02f, 1.30f},   // front-right
+                    {-1.02f, 1.30f},  // front-left
+                    {1.02f, -1.30f},  // rear-right
+                    {-1.02f, -1.30f}  // rear-left
             };
             for (float[] off : wheelOffsets) {
                 float wx = v.x + rightX * off[0] + fwdX * off[1];
                 float wz = v.z + rightZ * off[0] + fwdZ * off[1];
-                drawCube(wx, v.y + 0.32f, wz, v.yaw, 0.38f, 0.64f, 0.64f,
-                        TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
+                // Outer rubber tire
+                drawCube(wx, v.y + 0.36f, wz, v.yaw, 0.40f, 0.70f, 0.70f,
+                        TEX_CONCRETE, 0.10f, 0.10f, 0.10f, 1f, 1f, 1f, 0.15f, 1f);
+                // Alloy wheel hubcap
+                drawCube(wx + rightX * (off[0] > 0 ? 0.04f : -0.04f), v.y + 0.36f,
+                        wz + rightZ * (off[0] > 0 ? 0.04f : -0.04f), v.yaw,
+                        0.36f, 0.40f, 0.40f, TEX_RUST, 0.85f, 0.85f, 0.90f, 1f, 1f, 1f, 0.85f, 1f);
             }
-            // Headlights
+            // Headlights & Taillights
+            float h1x = v.x + rightX * 0.75f + fwdX * 2.05f, h1z = v.z + rightZ * 0.75f + fwdZ * 2.05f;
+            float h2x = v.x - rightX * 0.75f + fwdX * 2.05f, h2z = v.z - rightZ * 0.75f + fwdZ * 2.05f;
+            float t1x = v.x + rightX * 0.75f - fwdX * 2.00f, t1z = v.z + rightZ * 0.75f - fwdZ * 2.00f;
+            float t2x = v.x - rightX * 0.75f - fwdX * 2.00f, t2z = v.z - rightZ * 0.75f - fwdZ * 2.00f;
+            // Taillights
+            drawCube(t1x, v.y + 0.68f, t1z, v.yaw, 0.35f, 0.16f, 0.12f,
+                    TEX_NEON, 1.0f, 0.08f, 0.08f, 1f, 1f, 1f, 0.9f, 1f);
+            drawCube(t2x, v.y + 0.68f, t2z, v.yaw, 0.35f, 0.16f, 0.12f,
+                    TEX_NEON, 1.0f, 0.08f, 0.08f, 1f, 1f, 1f, 0.9f, 1f);
             if (v.headlightsOn) {
-                float h1x = v.x + rightX * 0.7f + fwdX * 2.05f;
-                float h1z = v.z + rightZ * 0.7f + fwdZ * 2.05f;
-                float h2x = v.x - rightX * 0.7f + fwdX * 2.05f;
-                float h2z = v.z - rightZ * 0.7f + fwdZ * 2.05f;
-                drawCube(h1x, v.y + 0.65f, h1z, v.yaw, 0.35f, 0.16f, 0.12f,
-                        TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
-                drawCube(h2x, v.y + 0.65f, h2z, v.yaw, 0.35f, 0.16f, 0.12f,
-                        TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
+                // Xenon Headlights
+                drawCube(h1x, v.y + 0.68f, h1z, v.yaw, 0.38f, 0.18f, 0.14f,
+                        TEX_NEON, 1.0f, 1.0f, 0.92f, 1f, 1f, 1f, 1.0f, 1f);
+                drawCube(h2x, v.y + 0.68f, h2z, v.yaw, 0.38f, 0.18f, 0.14f,
+                        TEX_NEON, 1.0f, 1.0f, 0.92f, 1f, 1f, 1f, 1.0f, 1f);
+                // Forward road light beam
+                GLES20.glEnable(GLES20.GL_BLEND);
+                GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+                GLES20.glDepthMask(false);
+                float beamX = v.x + fwdX * 8.0f, beamZ = v.z + fwdZ * 8.0f;
+                drawCube(beamX, v.y + 0.05f, beamZ, v.yaw, 4.8f, 0.02f, 12.0f,
+                        TEX_NEON, 1.0f, 0.98f, 0.85f, 1f, 1f, 1f, 0.0f, 0.18f);
+                GLES20.glDepthMask(true);
+                GLES20.glDisable(GLES20.GL_BLEND);
             }
         } else {
-            // Motorcycle Frame
-            drawCube(v.x, v.y + 0.55f, v.z, v.yaw, 0.55f, 0.50f, 1.8f,
-                    TEX_CONCRETE, 0.90f, 0.38f, 0.12f, 1f, 1f, 1f, 0.4f, 1f);
+            // Motorcycle Frame (Bold racing orange / red)
+            drawCube(v.x, v.y + 0.58f, v.z, v.yaw, 0.58f, 0.52f, 1.9f,
+                    TEX_CONCRETE, 0.95f, 0.28f, 0.10f, 1f, 1f, 1f, 0.70f, 1f);
+            // Chrome exhaust pipe
+            float exX = v.x + rightX * 0.32f - fwdX * 0.40f, exZ = v.z + rightZ * 0.32f - fwdZ * 0.40f;
+            drawCube(exX, v.y + 0.32f, exZ, v.yaw, 0.14f, 0.14f, 1.4f,
+                    TEX_RUST, 0.88f, 0.90f, 0.95f, 1f, 1f, 1f, 0.85f, 1f);
+            // Padded leather seat
+            drawCube(v.x, v.y + 0.82f, v.z - fwdZ * 0.20f, v.yaw, 0.45f, 0.14f, 0.75f,
+                    TEX_ROOF, 0.12f, 0.10f, 0.09f, 1f, 1f, 1f, 0.2f, 1f);
             // Handlebars
-            drawCube(v.x, v.y + 0.95f, v.z + 0.45f, v.yaw, 0.80f, 0.12f, 0.15f,
-                    TEX_RUST, 0.20f, 0.20f, 0.20f, 1f, 1f, 1f, 0.2f, 1f);
-            // Wheels
-            float rad2 = (float) Math.toRadians(v.yaw);
-            float fwdX2 = (float) Math.sin(rad2), fwdZ2 = -(float) Math.cos(rad2);
-            drawCube(v.x + fwdX2 * 0.85f, v.y + 0.32f, v.z + fwdZ2 * 0.85f, v.yaw,
-                    0.25f, 0.64f, 0.64f, TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
-            drawCube(v.x - fwdX2 * 0.85f, v.y + 0.32f, v.z - fwdZ2 * 0.85f, v.yaw,
-                    0.25f, 0.64f, 0.64f, TEX_CONCRETE, 0.12f, 0.12f, 0.12f, 1f, 1f, 1f, 0.2f, 1f);
-            // Headlight
+            drawCube(v.x, v.y + 0.98f, v.z + fwdZ * 0.45f, v.yaw, 0.84f, 0.12f, 0.15f,
+                    TEX_RUST, 0.22f, 0.22f, 0.24f, 1f, 1f, 1f, 0.35f, 1f);
+            // Wheels: Rubber tires + silver hubs
+            float fwX = v.x + fwdX * 0.92f, fwZ = v.z + fwdZ * 0.92f;
+            float rwX = v.x - fwdX * 0.92f, rwZ = v.z - fwdZ * 0.92f;
+            drawCube(fwX, v.y + 0.34f, fwZ, v.yaw, 0.28f, 0.68f, 0.68f,
+                    TEX_CONCRETE, 0.10f, 0.10f, 0.10f, 1f, 1f, 1f, 0.2f, 1f);
+            drawCube(rwX, v.y + 0.34f, rwZ, v.yaw, 0.28f, 0.68f, 0.68f,
+                    TEX_CONCRETE, 0.10f, 0.10f, 0.10f, 1f, 1f, 1f, 0.2f, 1f);
+            // Front Headlight & rear taillight
+            float tailX = v.x - fwdX * 0.96f, tailZ = v.z - fwdZ * 0.96f;
+            drawCube(tailX, v.y + 0.75f, tailZ, v.yaw, 0.22f, 0.16f, 0.10f,
+                    TEX_NEON, 1.0f, 0.08f, 0.08f, 1f, 1f, 1f, 0.9f, 1f);
             if (v.headlightsOn) {
-                drawCube(v.x + fwdX2 * 1.0f, v.y + 0.75f, v.z + fwdZ2 * 1.0f, v.yaw,
-                        0.25f, 0.20f, 0.12f, TEX_NEON, 1.0f, 1.0f, 0.85f, 1f, 1f, 1f, 0.9f, 1f);
+                float headX = v.x + fwdX * 1.02f, headZ = v.z + fwdZ * 1.02f;
+                drawCube(headX, v.y + 0.78f, headZ, v.yaw, 0.26f, 0.22f, 0.14f,
+                        TEX_NEON, 1.0f, 1.0f, 0.90f, 1f, 1f, 1f, 1.0f, 1f);
+                // Forward road light beam
+                GLES20.glEnable(GLES20.GL_BLEND);
+                GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
+                GLES20.glDepthMask(false);
+                float beamX = v.x + fwdX * 7.0f, beamZ = v.z + fwdZ * 7.0f;
+                drawCube(beamX, v.y + 0.05f, beamZ, v.yaw, 3.8f, 0.02f, 10.0f,
+                        TEX_NEON, 1.0f, 0.98f, 0.85f, 1f, 1f, 1f, 0.0f, 0.18f);
+                GLES20.glDepthMask(true);
+                GLES20.glDisable(GLES20.GL_BLEND);
             }
         }
     }
@@ -1203,6 +1344,13 @@ public class WorldRenderer {
         Mat4.mul(mTorsoCube, Mat4.scale(0.46f, 0.60f, 0.28f));
         drawCubeModel(mTorsoCube, tex, tr, tg, tb, 1f, 1f, 1f, 0.3f, 1f);
 
+        // Tactical survival backpack on torso
+        float[] mPack = Mat4.identity();
+        System.arraycopy(mTorso, 0, mPack, 0, 16);
+        Mat4.mul(mPack, Mat4.translate(0f, 0.05f, -0.20f));
+        Mat4.mul(mPack, Mat4.scale(0.32f, 0.44f, 0.16f));
+        drawCubeModel(mPack, TEX_RUST, 0.20f, 0.22f, 0.26f, 1f, 1f, 1f, 0.2f, 1f);
+
         // 2. Head
         float[] mHead = Mat4.identity();
         System.arraycopy(mTorso, 0, mHead, 0, 16);
@@ -1212,6 +1360,20 @@ public class WorldRenderer {
         if (pose.headYaw != 0f) Mat4.mul(mHead, Mat4.rotY(pose.headYaw));
         Mat4.mul(mHead, Mat4.scale(0.28f, 0.28f, 0.28f));
         drawCubeModel(mHead, tex, tr * 1.15f, tg * 1.15f, tb * 1.15f, 1f, 1f, 1f, 0.4f, 1f);
+
+        // Glowing tactical visor band across head
+        float[] mVisor = Mat4.identity();
+        System.arraycopy(mTorso, 0, mVisor, 0, 16);
+        Mat4.mul(mVisor, Mat4.translate(0f, 0.45f + 0.02f, 0.14f));
+        if (pose.headRoll != 0f) Mat4.mul(mVisor, Mat4.rotZ(pose.headRoll));
+        if (pose.headPitch != 0f) Mat4.mul(mVisor, Mat4.rotX(pose.headPitch));
+        if (pose.headYaw != 0f) Mat4.mul(mVisor, Mat4.rotY(pose.headYaw));
+        Mat4.mul(mVisor, Mat4.scale(0.26f, 0.08f, 0.06f));
+        boolean isChaser = (tex == TEX_CHASER);
+        float vr = isChaser ? 1.0f : 0.18f;
+        float vg = isChaser ? 0.12f : 0.92f;
+        float vb = isChaser ? 0.12f : 1.0f;
+        drawCubeModel(mVisor, TEX_NEON, vr, vg, vb, 1f, 1f, 1f, 0.95f, 1f);
 
         // 3. Left Arm
         float[] mLArm = Mat4.identity();
@@ -1312,13 +1474,15 @@ public class WorldRenderer {
         GLES20.glDisable(GLES20.GL_DEPTH_TEST);
         GLES20.glDepthMask(false);
         GLES20.glUseProgram(skyProgram);
-        float[] identity = new float[16];
-        Matrix.setIdentityM(identity, 0);
-        GLES20.glUniformMatrix4fv(sLocMVP, 1, false, identity, 0);
+        GLES20.glUniformMatrix4fv(sLocInvVP, 1, false, invVpMatrix, 0);
+        float[] sun = (activeDayNight != null) ? activeDayNight.sunDirection : SUN_DIR;
+        float[] light = (activeDayNight != null) ? activeDayNight.lightColor : LIGHT_COLOR;
         float[] zenith = (activeDayNight != null) ? activeDayNight.skyZenith : SKY_ZENITH;
         float[] horizon = (activeDayNight != null) ? activeDayNight.skyHorizon : SKY_HORIZON;
         GLES20.glUniform3f(sLocZenith, zenith[0], zenith[1], zenith[2]);
         GLES20.glUniform3f(sLocHorizon, horizon[0], horizon[1], horizon[2]);
+        GLES20.glUniform3f(sLocSunDir, sun[0], sun[1], sun[2]);
+        GLES20.glUniform3f(sLocSunColor, light[0], light[1], light[2]);
         GLES20.glEnableVertexAttribArray(sLocPos);
         GLES20.glVertexAttribPointer(sLocPos, 2, GLES20.GL_FLOAT, false, 0, clipQuadVbo);
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_FAN, 0, 4);

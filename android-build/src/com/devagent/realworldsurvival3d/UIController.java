@@ -77,9 +77,13 @@ public class UIController {
 
         overlayRoot = new FrameLayout(activity);
         overlayRoot.setLayoutParams(matchParent());
+        overlayRoot.setClickable(false);
+        overlayRoot.setFocusable(false);
 
         hudLayer = new FrameLayout(activity);
         hudLayer.setLayoutParams(matchParent());
+        hudLayer.setClickable(false);
+        hudLayer.setFocusable(false);
         buildHud(hudLayer);
         overlayRoot.addView(hudLayer);
 

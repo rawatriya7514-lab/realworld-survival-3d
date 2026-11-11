@@ -129,6 +129,11 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         applyFrameBudget();
 
         player = new Player();
+        player.x = 0f;
+        player.y = 22f;
+        player.z = 0f;
+        player.yaw = 45f;
+        player.pitch = -12f;
         worldMap = new WorldMap();
         chasers = new ArrayList<>();
         items = new ArrayList<>();
@@ -247,6 +252,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         }
 
         currentState = GameState.PLAYING;
+        if (ui != null) ui.showMenu(null);
         audioManager.playMusic(missionMusic(missionIndex));
     }
 
@@ -314,6 +320,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         mapController.centerOnPlayer(player.x, player.z);
 
         currentState = GameState.PLAYING;
+        if (ui != null) ui.showMenu(null);
         openWorld.recomputeActive(player.x, player.z);
         audioManager.playMusic(MUSIC_MENU);
     }
@@ -973,14 +980,17 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     // UIController callbacks (called on the UI thread)
     // =================================================================
     @Override public void onStartParkour() {
+        if (ui != null) ui.showMenu(null);
         queue(new Runnable() { public void run() { spawnMissions(currentMission); } });
     }
 
     @Override public void onStartOpenWorld() {
+        if (ui != null) ui.showMenu(null);
         queue(new Runnable() { public void run() { startOpenWorld(); } });
     }
 
     @Override public void onRetryActiveMode() {
+        if (ui != null) ui.showMenu(null);
         queue(new Runnable() {
             public void run() {
                 if (activeMode == GameMode.OPEN_WORLD) startOpenWorld();
@@ -990,6 +1000,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     }
 
     @Override public void onContinueGame() {
+        if (ui != null) ui.showMenu(null);
         queue(new Runnable() {
             public void run() {
                 SaveState s = saveManager.loadGameState();
@@ -1067,6 +1078,7 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     }
 
     @Override public void onRestartMission() {
+        if (ui != null) ui.showMenu(null);
         queue(new Runnable() { public void run() { spawnMissions(currentMission); } });
     }
 

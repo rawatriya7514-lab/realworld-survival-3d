@@ -163,7 +163,7 @@ apksigner sign \
     --v1-signing-enabled true \
     --v2-signing-enabled true \
     --v3-signing-enabled true \
-    --min-sdk-version 24 \
+    --min-sdk-version 21 \
     --ks ~/.android/debug.keystore \
     --ks-key-alias androiddebugkey \
     --ks-pass pass:android \
