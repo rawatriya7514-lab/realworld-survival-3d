@@ -88,6 +88,13 @@ public class SaveState {
     public int activeVehicleIndex = -1;
     public final List<VehicleState> vehicles = new ArrayList<>();
 
+    // Wuxia Subsystem States (Phases 1, 5, 6, 7, 10)
+    public String customizationStr = "";
+    public String weaponsStr = "";
+    public String qiStr = "";
+    public String skillTreeStr = "";
+    public String reputationStr = "";
+
     public SaveState() {
         // Defaults to initial survival state
     }
@@ -152,6 +159,22 @@ public class SaveState {
             if (i < vehicles.size() - 1) sb.append(";");
         }
         sb.append("\n");
+
+        if (customizationStr != null && !customizationStr.isEmpty()) {
+            sb.append("customization:").append(customizationStr).append("\n");
+        }
+        if (weaponsStr != null && !weaponsStr.isEmpty()) {
+            sb.append("weapons:").append(weaponsStr).append("\n");
+        }
+        if (qiStr != null && !qiStr.isEmpty()) {
+            sb.append("qi_system:").append(qiStr).append("\n");
+        }
+        if (skillTreeStr != null && !skillTreeStr.isEmpty()) {
+            sb.append("skill_tree:").append(skillTreeStr).append("\n");
+        }
+        if (reputationStr != null && !reputationStr.isEmpty()) {
+            sb.append("reputation:").append(reputationStr).append("\n");
+        }
 
         String payload = sb.toString();
         CRC32 crc = new CRC32();
@@ -287,6 +310,11 @@ public class SaveState {
                         }
                     }
                     break;
+                case "customization": s.customizationStr = val; break;
+                case "weapons": s.weaponsStr = val; break;
+                case "qi_system": s.qiStr = val; break;
+                case "skill_tree": s.skillTreeStr = val; break;
+                case "reputation": s.reputationStr = val; break;
             }
         }
         return s;

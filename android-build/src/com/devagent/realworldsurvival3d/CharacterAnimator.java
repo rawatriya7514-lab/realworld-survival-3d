@@ -14,6 +14,27 @@ package com.devagent.realworldsurvival3d;
 public class CharacterAnimator {
     public static final float BLEND_DURATION = 0.18f;
 
+    public enum WuxiaPoseState {
+        NONE,
+        FIGHTING_IDLE,
+        LIGHT_1,
+        LIGHT_2,
+        LIGHT_3,
+        HEAVY_1,
+        HEAVY_2,
+        CHARGED,
+        BLOCK,
+        PARRY,
+        DODGE,
+        GLIDE,
+        SWIM,
+        AIR_DASH,
+        GROUND_SLAM
+    }
+
+    public WuxiaPoseState wuxiaState = WuxiaPoseState.NONE;
+    public WuxiaPoseState previousWuxiaState = WuxiaPoseState.NONE;
+
     public static class Pose {
         // Head (degrees & offsets)
         public float headPitch = 0f;
@@ -45,6 +66,15 @@ public class CharacterAnimator {
         public float rightLegPitch = 0f;
         public float rightLegYaw = 0f;
         public float rightLegRoll = 0f;
+
+        public void reset() {
+            this.headPitch = 0f; this.headYaw = 0f; this.headRoll = 0f;
+            this.torsoPitch = 0f; this.torsoYaw = 0f; this.torsoRoll = 0f; this.torsoOffsetY = 0f;
+            this.leftArmPitch = 0f; this.leftArmYaw = 0f; this.leftArmRoll = 0f;
+            this.rightArmPitch = 0f; this.rightArmYaw = 0f; this.rightArmRoll = 0f;
+            this.leftLegPitch = 0f; this.leftLegYaw = 0f; this.leftLegRoll = 0f;
+            this.rightLegPitch = 0f; this.rightLegYaw = 0f; this.rightLegRoll = 0f;
+        }
 
         public void copyFrom(Pose other) {
             this.headPitch = other.headPitch;
@@ -150,11 +180,25 @@ public class CharacterAnimator {
             rollAngle += dt * (360f / 0.50f); // 360 deg over 0.5s rollDuration
         }
 
-        // Evaluate target pose for currentState
-        evaluateStatePose(currentState, horizSpeed, isGrounded, targetPose);
+        // Evaluate target pose for currentState or active wuxia pose
+        if (wuxiaState != WuxiaPoseState.NONE) {
+            evaluateWuxiaPose(wuxiaState, targetPose);
+        } else {
+            evaluateStatePose(currentState, horizSpeed, isGrounded, targetPose);
+        }
 
         // Smoothly blend previousPose into targetPose -> currentPose
         currentPose.lerp(previousPose, targetPose, blendProgress);
+    }
+
+    public void updateWuxia(float dt, WuxiaPoseState poseState, float horizSpeed, boolean isGrounded) {
+        if (poseState != wuxiaState) {
+            previousWuxiaState = wuxiaState;
+            wuxiaState = poseState;
+            previousPose.copyFrom(currentPose);
+            blendProgress = 0f;
+        }
+        update(dt, currentState, horizSpeed, isGrounded);
     }
 
     public static float calculateGaitFrequency(Player.ParkourState state, float horizSpeed) {
@@ -393,6 +437,138 @@ public class CharacterAnimator {
                 out.rightArmPitch = -55f;
                 out.leftLegPitch = 25f;
                 out.rightLegPitch = -15f;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    public static void evaluateWuxiaPose(WuxiaPoseState state, Pose out) {
+        out.reset();
+        switch (state) {
+            case FIGHTING_IDLE:
+                out.torsoPitch = 12f;
+                out.torsoYaw = -10f;
+                out.leftArmPitch = -35f;
+                out.rightArmPitch = -55f;
+                out.leftLegPitch = 15f;
+                out.rightLegPitch = -12f;
+                break;
+
+            case LIGHT_1:
+                out.torsoPitch = 15f;
+                out.torsoYaw = 25f;
+                out.rightArmPitch = -75f;
+                out.rightArmYaw = 40f;
+                out.leftArmRoll = -20f;
+                out.leftLegPitch = -15f;
+                out.rightLegPitch = 20f;
+                break;
+
+            case LIGHT_2:
+                out.torsoPitch = -8f;
+                out.torsoYaw = -20f;
+                out.rightArmPitch = 30f;
+                out.rightArmRoll = 60f;
+                out.leftArmPitch = -30f;
+                break;
+
+            case LIGHT_3:
+                out.torsoPitch = 18f;
+                out.torsoYaw = 45f;
+                out.rightArmPitch = -85f;
+                out.rightArmRoll = 25f;
+                out.leftArmPitch = 35f;
+                out.leftLegPitch = 25f;
+                break;
+
+            case HEAVY_1:
+                out.torsoPitch = 35f;
+                out.rightArmPitch = -110f;
+                out.leftArmPitch = -90f;
+                out.leftLegPitch = 30f;
+                out.rightLegPitch = -25f;
+                break;
+
+            case HEAVY_2:
+                out.torsoPitch = 10f;
+                out.torsoYaw = -45f;
+                out.rightArmPitch = -60f;
+                out.rightArmYaw = -40f;
+                out.leftArmRoll = 30f;
+                break;
+
+            case CHARGED:
+                out.torsoOffsetY = -0.22f;
+                out.torsoPitch = 15f;
+                out.leftArmPitch = 25f;
+                out.rightArmPitch = 25f;
+                out.leftArmRoll = -25f;
+                out.rightArmRoll = 25f;
+                out.leftLegPitch = 28f;
+                out.rightLegPitch = 28f;
+                break;
+
+            case BLOCK:
+                out.torsoPitch = 5f;
+                out.leftArmPitch = -65f;
+                out.rightArmPitch = -65f;
+                out.leftArmYaw = 35f;
+                out.rightArmYaw = -35f;
+                out.leftLegPitch = 12f;
+                out.rightLegPitch = -10f;
+                break;
+
+            case PARRY:
+                out.torsoOffsetY = 0.05f;
+                out.torsoRoll = -15f;
+                out.rightArmPitch = -85f;
+                out.rightArmRoll = 35f;
+                out.leftArmPitch = 40f;
+                break;
+
+            case DODGE:
+                out.torsoOffsetY = -0.32f;
+                out.torsoPitch = 32f;
+                out.leftArmPitch = 45f;
+                out.rightArmPitch = 45f;
+                out.leftLegPitch = 35f;
+                out.rightLegPitch = 35f;
+                break;
+
+            case GLIDE:
+                out.torsoPitch = 42f;
+                out.leftArmPitch = -10f;
+                out.rightArmPitch = -10f;
+                out.leftArmRoll = -75f;
+                out.rightArmRoll = 75f;
+                out.leftLegPitch = -22f;
+                out.rightLegPitch = -22f;
+                break;
+
+            case SWIM:
+                out.torsoPitch = 70f;
+                out.leftArmPitch = -60f;
+                out.rightArmPitch = 40f;
+                out.leftLegPitch = 18f;
+                out.rightLegPitch = -18f;
+                break;
+
+            case AIR_DASH:
+                out.torsoPitch = 82f;
+                out.leftArmPitch = 60f;
+                out.rightArmPitch = 60f;
+                out.leftLegPitch = -10f;
+                out.rightLegPitch = -10f;
+                break;
+
+            case GROUND_SLAM:
+                out.torsoPitch = 65f;
+                out.rightArmPitch = -120f;
+                out.leftArmPitch = 45f;
+                out.leftLegPitch = -25f;
+                out.rightLegPitch = -25f;
                 break;
 
             default:

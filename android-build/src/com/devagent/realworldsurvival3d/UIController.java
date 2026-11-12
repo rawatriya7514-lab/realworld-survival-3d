@@ -28,6 +28,8 @@ public class UIController {
     public interface Callbacks {
         void onStartParkour();
         void onStartOpenWorld();
+        void onStartWuxia(CharacterCustomization.Preset preset);
+        SkillTree getSkillTree();
         void onRetryActiveMode();
         void onContinueGame();
         void onResumeRequested();
@@ -49,8 +51,11 @@ public class UIController {
 
     // Menus
     private LinearLayout mainMenu, settingsMenu, pauseMenu, gameOverMenu,
-            missionCompleteMenu, aboutMenu;
+            missionCompleteMenu, aboutMenu, characterCreationMenu, skillTreeMenu;
     private TextView continueBtn;
+    private CharacterCustomization.Preset selectedPreset = CharacterCustomization.Preset.WANDERING_SWORDSMAN;
+    private TextView presetDetailsText;
+    private TextView skillPointsText;
 
     // Settings widgets
     private TextView masterValue, sensValue, musicValue, sfxValue, qualityValue, fpsValue, invertValue,
@@ -103,12 +108,16 @@ public class UIController {
         gameOverMenu = buildGameOverMenu();
         missionCompleteMenu = buildMissionCompleteMenu();
         aboutMenu = buildAboutMenu();
+        characterCreationMenu = buildCharacterCreationMenu();
+        skillTreeMenu = buildSkillTreeMenu();
         menuLayer.addView(mainMenu);
         menuLayer.addView(settingsMenu);
         menuLayer.addView(pauseMenu);
         menuLayer.addView(gameOverMenu);
         menuLayer.addView(missionCompleteMenu);
         menuLayer.addView(aboutMenu);
+        menuLayer.addView(characterCreationMenu);
+        menuLayer.addView(skillTreeMenu);
         overlayRoot.addView(menuLayer);
 
         showMenu(null); // start clean; GameView will show main menu
@@ -146,6 +155,8 @@ public class UIController {
         gameOverMenu.setVisibility(View.GONE);
         missionCompleteMenu.setVisibility(View.GONE);
         aboutMenu.setVisibility(View.GONE);
+        characterCreationMenu.setVisibility(View.GONE);
+        skillTreeMenu.setVisibility(View.GONE);
         if (which == null) {
             menuLayer.setVisibility(View.GONE);
             menuLayer.setClickable(false);
@@ -160,6 +171,11 @@ public class UIController {
             case "gameover": target = gameOverMenu; break;
             case "mission": target = missionCompleteMenu; break;
             case "about": target = aboutMenu; break;
+            case "character_creation": target = characterCreationMenu; break;
+            case "skill_tree":
+                updateSkillTreeDisplay();
+                target = skillTreeMenu;
+                break;
             default: target = mainMenu; break;
         }
         target.setVisibility(View.VISIBLE);
@@ -290,6 +306,7 @@ public class UIController {
         best.setGravity(Gravity.CENTER);
         panel.addView(best, wrapHeight(dp(8)));
 
+        panel.addView(menuButton("Wuxia Jianghu RPG", new Click() { public void go() { showMenu("character_creation"); } }), btnLp());
         panel.addView(menuButton("Open World", new Click() { public void go() { callbacks.onStartOpenWorld(); } }), btnLp());
         panel.addView(menuButton("Rooftop Parkour", new Click() { public void go() { callbacks.onStartParkour(); } }), btnLp());
         continueBtn = menuButton("Continue", new Click() { public void go() { callbacks.onContinueGame(); } });
@@ -409,6 +426,7 @@ public class UIController {
         LinearLayout panel = panelBase(Gravity.CENTER);
         panel.addView(menuTitle("PAUSED"));
         panel.addView(menuButton("Resume", new Click() { public void go() { callbacks.onResumeRequested(); } }), btnLp());
+        panel.addView(menuButton("Martial Arts Skill Tree", new Click() { public void go() { showMenu("skill_tree"); } }), btnLp());
         panel.addView(menuButton("Restart Mission", new Click() { public void go() { callbacks.onRestartMission(); } }), btnLp());
         panel.addView(menuButton("Settings", new Click() { public void go() { openSettingsFrom("pause"); } }), btnLp());
         panel.addView(menuButton("Main Menu", new Click() { public void go() { callbacks.onQuitToMenu(); } }), btnLp());
@@ -470,6 +488,127 @@ public class UIController {
         panel.addView(body, wrapHeight(dp(6)));
         panel.addView(menuButton("Back", new Click() { public void go() { showMenu("back"); } }), btnLp());
         return panel;
+    }
+
+    private LinearLayout buildCharacterCreationMenu() {
+        LinearLayout panel = panelBase(Gravity.CENTER);
+        panel.addView(menuTitle("WUXIA CHARACTER CREATION"));
+        panel.addView(menuSubtitle("Select your martial arts archetype and Jianghu identity"));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setVerticalScrollBarEnabled(true);
+        LinearLayout inner = new LinearLayout(activity);
+        inner.setOrientation(LinearLayout.VERTICAL);
+
+        inner.addView(menuButton("Wandering Swordsman", new Click() {
+            public void go() { selectPreset(CharacterCustomization.Preset.WANDERING_SWORDSMAN); }
+        }), btnLp());
+
+        inner.addView(menuButton("Shadow Blade", new Click() {
+            public void go() { selectPreset(CharacterCustomization.Preset.SHADOW_BLADE); }
+        }), btnLp());
+
+        inner.addView(menuButton("Mystic Scholar", new Click() {
+            public void go() { selectPreset(CharacterCustomization.Preset.MYSTIC_SCHOLAR); }
+        }), btnLp());
+
+        inner.addView(menuButton("Dragon Vanguard", new Click() {
+            public void go() { selectPreset(CharacterCustomization.Preset.DRAGON_VANGUARD); }
+        }), btnLp());
+
+        inner.addView(menuButton("Jade Lotus Prodigy", new Click() {
+            public void go() { selectPreset(CharacterCustomization.Preset.JADE_LOTUS_PRODIGY); }
+        }), btnLp());
+
+        presetDetailsText = new TextView(activity);
+        presetDetailsText.setTextColor(COLOR_ACCENT);
+        presetDetailsText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        presetDetailsText.setPadding(dp(12), dp(10), dp(12), dp(10));
+        presetDetailsText.setText("Archetype: Wandering Swordsman\nWeapon: Iron Crescent Sword\nStyle: Fluid slashes and swift counter-angles\nArmor: Forearm Vambraces & Bamboo Hat");
+        inner.addView(presetDetailsText);
+
+        scroll.addView(inner, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f);
+        panel.addView(scroll, scrollLp);
+
+        panel.addView(menuButton("Embark on Jianghu Journey", new Click() {
+            public void go() { callbacks.onStartWuxia(selectedPreset); }
+        }), btnLp());
+        panel.addView(menuButton("Back to Menu", new Click() {
+            public void go() { showMainMenu(); }
+        }), btnLp());
+        return panel;
+    }
+
+    private void selectPreset(CharacterCustomization.Preset p) {
+        selectedPreset = p;
+        if (presetDetailsText != null) {
+            switch (p) {
+                case WANDERING_SWORDSMAN:
+                    presetDetailsText.setText("Archetype: Wandering Swordsman\nWeapon: Iron Crescent Sword\nStyle: Fluid slashes and swift counter-angles\nArmor: Forearm Vambraces & Bamboo Hat");
+                    break;
+                case SHADOW_BLADE:
+                    presetDetailsText.setText("Archetype: Shadow Blade\nWeapon: Twin Phoenix Blades\nStyle: Ultra-fast flurry strikes and evasive hops\nArmor: Midnight Silk & Face Mask");
+                    break;
+                case MYSTIC_SCHOLAR:
+                    presetDetailsText.setText("Archetype: Mystic Scholar\nWeapon: Iron Feather Fan & Sword\nStyle: Wind-shear projectiles and Qi warding\nArmor: Scholar Hanfu & Jade Pendant");
+                    break;
+                case DRAGON_VANGUARD:
+                    presetDetailsText.setText("Archetype: Dragon Vanguard\nWeapon: Mountain Cleaver Greatsword\nStyle: Crushing guard-breaks and hyper armor\nArmor: Heavy Lamellar Chest Plate");
+                    break;
+                case JADE_LOTUS_PRODIGY:
+                    presetDetailsText.setText("Archetype: Jade Lotus Prodigy\nWeapon: Azure Dragon Spear\nStyle: Piercing thrusts and wide sweeping arcs\nArmor: Emerald Silk & Shoulder Guards");
+                    break;
+            }
+        }
+    }
+
+    private LinearLayout buildSkillTreeMenu() {
+        LinearLayout panel = panelBase(Gravity.CENTER);
+        panel.addView(menuTitle("MARTIAL ARTS SKILL TREE"));
+
+        skillPointsText = new TextView(activity);
+        skillPointsText.setTextColor(COLOR_ACCENT);
+        skillPointsText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        skillPointsText.setGravity(Gravity.CENTER);
+        panel.addView(skillPointsText, wrapHeight(dp(6)));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setVerticalScrollBarEnabled(true);
+        LinearLayout inner = new LinearLayout(activity);
+        inner.setOrientation(LinearLayout.VERTICAL);
+
+        for (final SkillTree.Branch b : SkillTree.Branch.values()) {
+            inner.addView(menuButton(b.title + " (Upgrade)", new Click() {
+                public void go() {
+                    SkillTree st = callbacks.getSkillTree();
+                    if (st != null && st.upgradeBranch(b)) {
+                        updateSkillTreeDisplay();
+                    }
+                }
+            }), btnLp());
+        }
+
+        scroll.addView(inner, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f);
+        panel.addView(scroll, scrollLp);
+
+        panel.addView(menuButton("Back", new Click() {
+            public void go() { showMenu("pause"); }
+        }), btnLp());
+        return panel;
+    }
+
+    private void updateSkillTreeDisplay() {
+        SkillTree st = callbacks.getSkillTree();
+        if (st != null && skillPointsText != null) {
+            skillPointsText.setText("Available Skill Points: " + st.availableSkillPoints +
+                    "\nActive Inner Way: " + st.activeInnerWay.title);
+        }
     }
 
     // =================================================================

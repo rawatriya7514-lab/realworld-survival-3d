@@ -59,6 +59,18 @@ public class TouchInput {
     public boolean interactPressed = false;
     public boolean pausePressed = false;
 
+    // Wuxia Combat Touch Controls (Phase 11)
+    public final CombatTouchLayout combatLayout = new CombatTouchLayout();
+    public boolean wuxiaControls = false;
+    public boolean lightAttackPressed = false;
+    public boolean heavyAttackPressed = false;
+    public boolean blockPressed = false;
+    public boolean dodgePressed = false;
+    public boolean weaponSwitchPressed = false;
+    public boolean qiSkillPressed = false;
+    public boolean lockOnPressed = false;
+    private int blockPointerId = -1;
+
     // Fullscreen Map overlay state & bindings (Phase 6)
     public boolean mapOverlayVisible = false;
     public MapViewController mapController = null;
@@ -140,6 +152,8 @@ public class TouchInput {
         this.btnInteractX = layout.btnInteractX;
         this.btnInteractY = layout.btnInteractY;
         this.btnInteractRadius = layout.btnInteractRadius;
+
+        combatLayout.update(width, height, buttonScale, buttonOpacity, leftHanded);
     }
 
     public void handleTouchEvent(MotionEvent event) {
@@ -165,19 +179,41 @@ public class TouchInput {
                     return;
                 }
 
-                // Check Action Buttons via TouchLayout
-                TouchLayout.ButtonType btn = layout.testButton(px, py, interactVisible);
-                switch (btn) {
-                    case JUMP: jumpPressed = true; return;
-                    case CROUCH: crouchToggled = true; return;
-                    case VAULT: vaultPressed = true; return;
-                    case SLIDE: slidePressed = true; return;
-                    case SPRINT: sprintToggled = true; return;
-                    case CAM: camTogglePressed = true; return;
-                    case MAP: mapPressed = true; return;
-                    case INTERACT: interactPressed = true; return;
-                    case PAUSE: pausePressed = true; return;
-                    case NONE: break;
+                // Check Action Buttons via TouchLayout or CombatTouchLayout
+                if (wuxiaControls) {
+                    CombatTouchLayout.CombatButton cBtn = combatLayout.hitTest(px, py);
+                    switch (cBtn) {
+                        case LIGHT_ATTACK: lightAttackPressed = true; return;
+                        case HEAVY_ATTACK: heavyAttackPressed = true; return;
+                        case BLOCK_PARRY:
+                            blockPressed = true;
+                            blockPointerId = pointerId;
+                            return;
+                        case DODGE: dodgePressed = true; return;
+                        case JUMP: jumpPressed = true; return;
+                        case WEAPON_SWITCH: weaponSwitchPressed = true; return;
+                        case QI_SKILL: qiSkillPressed = true; return;
+                        case LOCK_ON: lockOnPressed = true; return;
+                        case INTERACT: interactPressed = true; return;
+                        case SPRINT: sprintToggled = true; return;
+                        case MAP: mapPressed = true; return;
+                        case PAUSE: pausePressed = true; return;
+                        case NONE: break;
+                    }
+                } else {
+                    TouchLayout.ButtonType btn = layout.testButton(px, py, interactVisible);
+                    switch (btn) {
+                        case JUMP: jumpPressed = true; return;
+                        case CROUCH: crouchToggled = true; return;
+                        case VAULT: vaultPressed = true; return;
+                        case SLIDE: slidePressed = true; return;
+                        case SPRINT: sprintToggled = true; return;
+                        case CAM: camTogglePressed = true; return;
+                        case MAP: mapPressed = true; return;
+                        case INTERACT: interactPressed = true; return;
+                        case PAUSE: pausePressed = true; return;
+                        case NONE: break;
+                    }
                 }
 
                 // Joystick region (adaptive for handedness)
@@ -250,6 +286,10 @@ public class TouchInput {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_POINTER_UP:
             case MotionEvent.ACTION_CANCEL: {
+                if (pointerId == blockPointerId) {
+                    blockPointerId = -1;
+                    blockPressed = false;
+                }
                 if (pointerId == joystickPointerId) {
                     joystickPointerId = -1;
                     isJoystickActive = false;
@@ -430,6 +470,12 @@ public class TouchInput {
         mapClosed = false;
         interactPressed = false;
         pausePressed = false;
+        lightAttackPressed = false;
+        heavyAttackPressed = false;
+        dodgePressed = false;
+        weaponSwitchPressed = false;
+        qiSkillPressed = false;
+        lockOnPressed = false;
         deltaYaw = 0f;
         deltaPitch = 0f;
         deltaZoom = 0f;

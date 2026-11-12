@@ -143,6 +143,15 @@ public class Player {
     /** Procedural limb animation state machine. */
     public final CharacterAnimator animator = new CharacterAnimator();
 
+    // Wuxia Subsystems (Phases 1-7)
+    public final CharacterCustomization customization = new CharacterCustomization();
+    public final WuxiaMovementSystem wuxiaMovement = new WuxiaMovementSystem();
+    public final WeaponSystem weapons = new WeaponSystem();
+    public final WuxiaCombatSystem combat = new WuxiaCombatSystem();
+    public final QiAbilitySystem qiAbilities = new QiAbilitySystem();
+    public final SkillTree skillTree = new SkillTree();
+    public boolean wuxiaMode = false;
+
     public void update(float dt, float moveInputX, float moveInputY, boolean jumpPressed,
                        boolean slidePressed, boolean sprintToggled, List<Obstacle> obstacles) {
         update(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, false, obstacles);
@@ -236,6 +245,45 @@ public class Player {
 
         if (!handled) {
             handleMovement(dt, moveInputX, moveInputY, jumpPressed, slidePressed, sprintToggled, crouchPressed, obstacles);
+        }
+
+        if (wuxiaMode) {
+            wuxiaMovement.update(dt, this, obstacles);
+            weapons.update(dt);
+            combat.update(dt, this);
+            qiAbilities.update(dt);
+
+            if (isGrounded) {
+                wuxiaMovement.onLand();
+            }
+
+            // Map Wuxia states to procedural animator poses
+            if (combat.state != WuxiaCombatSystem.CombatState.NEUTRAL) {
+                switch (combat.state) {
+                    case LIGHT_1: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.LIGHT_1; break;
+                    case LIGHT_2: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.LIGHT_2; break;
+                    case LIGHT_3: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.LIGHT_3; break;
+                    case HEAVY_1: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.HEAVY_1; break;
+                    case HEAVY_2: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.HEAVY_2; break;
+                    case CHARGING:
+                    case CHARGED_RELEASE: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.CHARGED; break;
+                    case BLOCKING: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.BLOCK; break;
+                    case PARRYING:
+                    case PARRY_SUCCESS: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.PARRY; break;
+                    case DODGING: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.DODGE; break;
+                    default: animator.wuxiaState = CharacterAnimator.WuxiaPoseState.FIGHTING_IDLE; break;
+                }
+            } else if (wuxiaMovement.isGliding) {
+                animator.wuxiaState = CharacterAnimator.WuxiaPoseState.GLIDE;
+            } else if (wuxiaMovement.inWater) {
+                animator.wuxiaState = CharacterAnimator.WuxiaPoseState.SWIM;
+            } else if (wuxiaMovement.currentState == WuxiaMovementSystem.MovementState.AIR_DASH) {
+                animator.wuxiaState = CharacterAnimator.WuxiaPoseState.AIR_DASH;
+            } else if (wuxiaMovement.currentState == WuxiaMovementSystem.MovementState.FAST_DESCENT) {
+                animator.wuxiaState = CharacterAnimator.WuxiaPoseState.GROUND_SLAM;
+            } else {
+                animator.wuxiaState = CharacterAnimator.WuxiaPoseState.NONE;
+            }
         }
 
         // Advance procedural character animator
@@ -385,6 +433,9 @@ public class Player {
                     vy = jumpImpulse;
                     isGrounded = false;
                     canDoubleJump = true;
+                    if (wuxiaMode) {
+                        wuxiaMovement.jumpsRemaining = wuxiaMovement.tripleJumpUnlocked ? 2 : 1;
+                    }
                     state = ParkourState.JUMP;
                     peakFallY = y;
                     playJumpSfx = true;
@@ -393,9 +444,19 @@ public class Player {
             } else if (canDoubleJump) {
                 vy = jumpImpulse * 0.9f;
                 canDoubleJump = false;
+                if (wuxiaMode && wuxiaMovement.tripleJumpUnlocked) {
+                    wuxiaMovement.jumpsRemaining = 1;
+                }
                 state = ParkourState.DOUBLE_JUMP;
                 playDoubleJumpSfx = true;
                 addCombo("AIR BOOST", 10);
+            } else if (wuxiaMode && wuxiaMovement.tripleJumpUnlocked && wuxiaMovement.jumpsRemaining > 0 && stamina >= 15f) {
+                vy = wuxiaMovement.jumpVelocity3;
+                wuxiaMovement.jumpsRemaining = 0;
+                stamina -= 15f;
+                state = ParkourState.DOUBLE_JUMP;
+                wuxiaMovement.triggerTripleJumpVfx = true;
+                addCombo("SKYWARD TRIPLE LEAP", 15);
             }
         }
 
@@ -952,7 +1013,7 @@ public class Player {
         }
     }
 
-    private void addCombo(String actionName, int points) {
+    public void addCombo(String actionName, int points) {
         comboCount++;
         comboTimer = 3.5f;
         lastParkourAction = actionName + " (x" + comboCount + ")";

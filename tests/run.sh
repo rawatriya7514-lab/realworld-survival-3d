@@ -36,6 +36,19 @@ javac -Xlint:-options -d "$OUT" \
     "$S/SaveState.java" \
     "$S/SaveFileManager.java" \
     "$S/CullingOptimizer.java" \
+    "$S/CharacterCustomization.java" \
+    "$S/WuxiaMovementSystem.java" \
+    "$S/WuxiaWeapon.java" \
+    "$S/WeaponSystem.java" \
+    "$S/WuxiaCombatSystem.java" \
+    "$S/QiAbilitySystem.java" \
+    "$S/SkillTree.java" \
+    "$S/WuxiaEnemy.java" \
+    "$S/WuxiaNPC.java" \
+    "$S/ReputationSystem.java" \
+    "$S/WuxiaWorld.java" \
+    "$S/CombatTouchLayout.java" \
+    "$S/WuxiaCamera.java" \
     "$ROOT/tests/GameLogicTest.java" \
     "$ROOT/tests/OpenWorldTest.java" \
     "$ROOT/tests/MovementTest.java" \
@@ -51,7 +64,8 @@ javac -Xlint:-options -d "$OUT" \
     "$ROOT/tests/AudioSettingsTest.java" \
     "$ROOT/tests/SaveLoadTest.java" \
     "$ROOT/tests/OptimizationTest.java" \
-    "$ROOT/tests/FinalQATest.java" 2>&1 | grep -v "^Note:" || true
+    "$ROOT/tests/FinalQATest.java" \
+    "$ROOT/tests/WuxiaSystemTest.java" 2>&1 | grep -v "^Note:" || true
 
 java -cp "$OUT" GameLogicTest
 java -cp "$OUT" OpenWorldTest
@@ -69,3 +83,4 @@ java -cp "$OUT" AudioSettingsTest
 java -cp "$OUT" SaveLoadTest
 java -cp "$OUT" OptimizationTest
 java -cp "$OUT" FinalQATest
+java -cp "$OUT" WuxiaSystemTest

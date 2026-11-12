@@ -902,7 +902,7 @@ public class WorldRenderer {
             float tintG = player.adrenalineRush ? 0.85f : 0.7f;
             float tintB = player.adrenalineRush ? 0.15f : 1.0f;
             if (player.animator != null && player.animator.currentPose != null) {
-                drawAnimatedCharacter(player.x, player.y, player.z, -player.yaw,
+                drawAnimatedCharacter(player, player.x, player.y, player.z, -player.yaw,
                         player.animator.currentPose, TEX_RUNNER, tintR, tintG, tintB);
             } else {
                 float w = (player.state == Player.ParkourState.SLIDING
@@ -1328,7 +1328,20 @@ public class WorldRenderer {
     private void drawAnimatedCharacter(float x, float y, float z, float yawDeg,
                                       CharacterAnimator.Pose pose,
                                       int tex, float tr, float tg, float tb) {
+        drawAnimatedCharacter(null, x, y, z, yawDeg, pose, tex, tr, tg, tb);
+    }
+
+    private void drawAnimatedCharacter(Player player, float x, float y, float z, float yawDeg,
+                                      CharacterAnimator.Pose pose,
+                                      int tex, float tr, float tg, float tb) {
         float[] base = Mat4.trs(x, y, z, yawDeg, 1f, 1f, 1f);
+
+        boolean isWuxia = (player != null && player.wuxiaMode);
+        if (isWuxia) {
+            tr = player.customization.outfitPrimaryR;
+            tg = player.customization.outfitPrimaryG;
+            tb = player.customization.outfitPrimaryB;
+        }
 
         // 1. Torso
         float torsoCenterY = 1.05f + pose.torsoOffsetY;
@@ -1344,12 +1357,27 @@ public class WorldRenderer {
         Mat4.mul(mTorsoCube, Mat4.scale(0.46f, 0.60f, 0.28f));
         drawCubeModel(mTorsoCube, tex, tr, tg, tb, 1f, 1f, 1f, 0.3f, 1f);
 
-        // Tactical survival backpack on torso
-        float[] mPack = Mat4.identity();
-        System.arraycopy(mTorso, 0, mPack, 0, 16);
-        Mat4.mul(mPack, Mat4.translate(0f, 0.05f, -0.20f));
-        Mat4.mul(mPack, Mat4.scale(0.32f, 0.44f, 0.16f));
-        drawCubeModel(mPack, TEX_RUST, 0.20f, 0.22f, 0.26f, 1f, 1f, 1f, 0.2f, 1f);
+        // Armor or survival pack on torso
+        if (isWuxia) {
+            if (player.customization.armor == CharacterCustomization.ArmorStyle.CHEST_LAMELLAR) {
+                float[] mPlate = Mat4.identity();
+                System.arraycopy(mTorso, 0, mPlate, 0, 16);
+                Mat4.mul(mPlate, Mat4.translate(0f, 0.04f, 0.12f));
+                Mat4.mul(mPlate, Mat4.scale(0.48f, 0.45f, 0.10f));
+                drawCubeModel(mPlate, TEX_ROOF, player.customization.outfitSecondaryR,
+                        player.customization.outfitSecondaryG, player.customization.outfitSecondaryB, 1f, 1f, 1f, 0.5f, 1f);
+            }
+            if (player.wuxiaMovement.isGliding) {
+                drawGliderModel(mTorso);
+            }
+        } else {
+            // Tactical survival backpack on torso
+            float[] mPack = Mat4.identity();
+            System.arraycopy(mTorso, 0, mPack, 0, 16);
+            Mat4.mul(mPack, Mat4.translate(0f, 0.05f, -0.20f));
+            Mat4.mul(mPack, Mat4.scale(0.32f, 0.44f, 0.16f));
+            drawCubeModel(mPack, TEX_RUST, 0.20f, 0.22f, 0.26f, 1f, 1f, 1f, 0.2f, 1f);
+        }
 
         // 2. Head
         float[] mHead = Mat4.identity();
@@ -1359,21 +1387,38 @@ public class WorldRenderer {
         if (pose.headPitch != 0f) Mat4.mul(mHead, Mat4.rotX(pose.headPitch));
         if (pose.headYaw != 0f) Mat4.mul(mHead, Mat4.rotY(pose.headYaw));
         Mat4.mul(mHead, Mat4.scale(0.28f, 0.28f, 0.28f));
-        drawCubeModel(mHead, tex, tr * 1.15f, tg * 1.15f, tb * 1.15f, 1f, 1f, 1f, 0.4f, 1f);
+        float headR = isWuxia ? player.customization.skinR : tr * 1.15f;
+        float headG = isWuxia ? player.customization.skinG : tg * 1.15f;
+        float headB = isWuxia ? player.customization.skinB : tb * 1.15f;
+        drawCubeModel(mHead, tex, headR, headG, headB, 1f, 1f, 1f, 0.4f, 1f);
 
-        // Glowing tactical visor band across head
-        float[] mVisor = Mat4.identity();
-        System.arraycopy(mTorso, 0, mVisor, 0, 16);
-        Mat4.mul(mVisor, Mat4.translate(0f, 0.45f + 0.02f, 0.14f));
-        if (pose.headRoll != 0f) Mat4.mul(mVisor, Mat4.rotZ(pose.headRoll));
-        if (pose.headPitch != 0f) Mat4.mul(mVisor, Mat4.rotX(pose.headPitch));
-        if (pose.headYaw != 0f) Mat4.mul(mVisor, Mat4.rotY(pose.headYaw));
-        Mat4.mul(mVisor, Mat4.scale(0.26f, 0.08f, 0.06f));
-        boolean isChaser = (tex == TEX_CHASER);
-        float vr = isChaser ? 1.0f : 0.18f;
-        float vg = isChaser ? 0.12f : 0.92f;
-        float vb = isChaser ? 0.12f : 1.0f;
-        drawCubeModel(mVisor, TEX_NEON, vr, vg, vb, 1f, 1f, 1f, 0.95f, 1f);
+        if (isWuxia) {
+            // Bamboo Hat accessory
+            if (player.customization.accessory == CharacterCustomization.Accessory.BAMBOO_HAT) {
+                float[] mHat = Mat4.identity();
+                System.arraycopy(mTorso, 0, mHat, 0, 16);
+                Mat4.mul(mHat, Mat4.translate(0f, 0.62f, 0.02f));
+                if (pose.headRoll != 0f) Mat4.mul(mHat, Mat4.rotZ(pose.headRoll));
+                if (pose.headPitch != 0f) Mat4.mul(mHat, Mat4.rotX(pose.headPitch));
+                if (pose.headYaw != 0f) Mat4.mul(mHat, Mat4.rotY(pose.headYaw));
+                Mat4.mul(mHat, Mat4.scale(0.68f, 0.10f, 0.68f));
+                drawCubeModel(mHat, TEX_ROOF, 0.75f, 0.62f, 0.35f, 1f, 1f, 1f, 0.15f, 1f);
+            }
+        } else {
+            // Glowing tactical visor band across head
+            float[] mVisor = Mat4.identity();
+            System.arraycopy(mTorso, 0, mVisor, 0, 16);
+            Mat4.mul(mVisor, Mat4.translate(0f, 0.45f + 0.02f, 0.14f));
+            if (pose.headRoll != 0f) Mat4.mul(mVisor, Mat4.rotZ(pose.headRoll));
+            if (pose.headPitch != 0f) Mat4.mul(mVisor, Mat4.rotX(pose.headPitch));
+            if (pose.headYaw != 0f) Mat4.mul(mVisor, Mat4.rotY(pose.headYaw));
+            Mat4.mul(mVisor, Mat4.scale(0.26f, 0.08f, 0.06f));
+            boolean isChaser = (tex == TEX_CHASER);
+            float vr = isChaser ? 1.0f : 0.18f;
+            float vg = isChaser ? 0.12f : 0.92f;
+            float vb = isChaser ? 0.12f : 1.0f;
+            drawCubeModel(mVisor, TEX_NEON, vr, vg, vb, 1f, 1f, 1f, 0.95f, 1f);
+        }
 
         // 3. Left Arm
         float[] mLArm = Mat4.identity();
@@ -1397,6 +1442,11 @@ public class WorldRenderer {
         Mat4.mul(mRArm, Mat4.scale(0.14f, 0.54f, 0.14f));
         drawCubeModel(mRArm, tex, tr * 0.9f, tg * 0.9f, tb * 0.9f, 1f, 1f, 1f, 0.25f, 1f);
 
+        // Render equipped Wuxia weapon in right hand
+        if (isWuxia && player.weapons != null) {
+            drawWuxiaWeaponModel(mRArm, player.weapons.getActiveWeapon());
+        }
+
         // 5. Left Leg
         float[] mLLeg = Mat4.identity();
         System.arraycopy(base, 0, mLLeg, 0, 16);
@@ -1418,6 +1468,76 @@ public class WorldRenderer {
         Mat4.mul(mRLeg, Mat4.translate(0f, -0.34f, 0f));
         Mat4.mul(mRLeg, Mat4.scale(0.18f, 0.70f, 0.18f));
         drawCubeModel(mRLeg, tex, tr * 0.75f, tg * 0.75f, tb * 0.75f, 1f, 1f, 1f, 0.2f, 1f);
+    }
+
+    private void drawWuxiaWeaponModel(float[] mRArm, WuxiaWeapon weapon) {
+        if (weapon == null) return;
+        float[] mWeap = Mat4.identity();
+        System.arraycopy(mRArm, 0, mWeap, 0, 16);
+        switch (weapon.type) {
+            case SWORD:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.35f, 0.40f));
+                Mat4.mul(mWeap, Mat4.rotX(90f));
+                Mat4.mul(mWeap, Mat4.scale(0.08f, 1.10f, 0.02f));
+                drawCubeModel(mWeap, TEX_NEON, 0.88f, 0.92f, 1.0f, 1f, 1f, 1f, 0.85f, 1f);
+                break;
+            case SPEAR:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.30f, 0.55f));
+                Mat4.mul(mWeap, Mat4.rotX(90f));
+                Mat4.mul(mWeap, Mat4.scale(0.06f, 2.30f, 0.06f));
+                drawCubeModel(mWeap, TEX_RUST, 0.75f, 0.25f, 0.20f, 1f, 1f, 1f, 0.6f, 1f);
+                break;
+            case GREATSWORD:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.40f, 0.45f));
+                Mat4.mul(mWeap, Mat4.rotX(90f));
+                Mat4.mul(mWeap, Mat4.scale(0.24f, 1.35f, 0.04f));
+                drawCubeModel(mWeap, TEX_RUST, 0.70f, 0.72f, 0.78f, 1f, 1f, 1f, 0.7f, 1f);
+                break;
+            case DUAL_BLADES:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.30f, 0.25f));
+                Mat4.mul(mWeap, Mat4.rotX(85f));
+                Mat4.mul(mWeap, Mat4.scale(0.07f, 0.65f, 0.02f));
+                drawCubeModel(mWeap, TEX_NEON, 0.95f, 0.80f, 0.30f, 1f, 1f, 1f, 0.8f, 1f);
+                break;
+            case STAFF:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.25f, 0.35f));
+                Mat4.mul(mWeap, Mat4.rotX(80f));
+                Mat4.mul(mWeap, Mat4.scale(0.07f, 2.0f, 0.07f));
+                drawCubeModel(mWeap, TEX_ROOF, 0.55f, 0.35f, 0.20f, 1f, 1f, 1f, 0.3f, 1f);
+                break;
+            case BOW:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.20f, 0.25f));
+                Mat4.mul(mWeap, Mat4.scale(0.05f, 1.10f, 0.18f));
+                drawCubeModel(mWeap, TEX_ROOF, 0.40f, 0.28f, 0.15f, 1f, 1f, 1f, 0.4f, 1f);
+                break;
+            case FAN:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.22f, 0.20f));
+                Mat4.mul(mWeap, Mat4.scale(0.35f, 0.30f, 0.03f));
+                drawCubeModel(mWeap, TEX_NEON, 0.75f, 0.85f, 0.95f, 1f, 1f, 1f, 0.8f, 1f);
+                break;
+            case UMBRELLA:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.25f, 0.30f));
+                Mat4.mul(mWeap, Mat4.rotX(80f));
+                Mat4.mul(mWeap, Mat4.scale(0.12f, 1.15f, 0.12f));
+                drawCubeModel(mWeap, TEX_ROOF, 0.80f, 0.25f, 0.30f, 1f, 1f, 1f, 0.4f, 1f);
+                break;
+            case ROPE_DART:
+                Mat4.mul(mWeap, Mat4.translate(0f, -0.25f, 0.25f));
+                Mat4.mul(mWeap, Mat4.scale(0.08f, 0.25f, 0.08f));
+                drawCubeModel(mWeap, TEX_NEON, 0.85f, 0.85f, 0.90f, 1f, 1f, 1f, 0.85f, 1f);
+                break;
+        }
+    }
+
+    private void drawGliderModel(float[] mTorso) {
+        float[] mGlider = Mat4.identity();
+        System.arraycopy(mTorso, 0, mGlider, 0, 16);
+        Mat4.mul(mGlider, Mat4.translate(0f, 0.30f, -0.35f));
+        Mat4.mul(mGlider, Mat4.rotX(-20f));
+        float[] mWing = Mat4.identity();
+        System.arraycopy(mGlider, 0, mWing, 0, 16);
+        Mat4.mul(mWing, Mat4.scale(2.60f, 0.05f, 1.10f));
+        drawCubeModel(mWing, TEX_ROOF, 0.82f, 0.70f, 0.45f, 1f, 2f, 1f, 0.1f, 1f);
     }
 
     private void drawCube(float x, float y, float z, float rotDeg,
@@ -1537,15 +1657,80 @@ public class WorldRenderer {
             return;
         }
 
-        // Health / stamina / adrenaline bars
+        // Health / stamina / adrenaline / Qi bars
         drawBar(mvp, tmp, 25f, 25f, 240f, 18f, player.health / player.maxHealth,
                 0.2f, 0.85f, 0.25f);
         drawBar(mvp, tmp, 25f, 50f, 240f, 14f, player.stamina / player.maxStamina,
                 0.1f, 0.75f, 0.95f);
-        drawBar(mvp, tmp, 25f, 70f, 240f, 10f, player.adrenaline / player.maxAdrenaline,
-                1.0f, 0.75f, 0.1f);
+        if (player.wuxiaMode) {
+            // Qi energy bar
+            drawBar(mvp, tmp, 25f, 70f, 240f, 10f, player.qiAbilities.currentQi / player.qiAbilities.maxQi,
+                    0.35f, 0.40f, 0.95f);
+        } else {
+            drawBar(mvp, tmp, 25f, 70f, 240f, 10f, player.adrenaline / player.maxAdrenaline,
+                    1.0f, 0.75f, 0.1f);
+        }
 
-        if (touch != null) {
+        if (touch != null && touch.wuxiaControls) {
+            float op = touch.buttonOpacity;
+            CombatTouchLayout cl = touch.combatLayout;
+
+            // Joystick
+            drawCircle(mvp, tmp, touch.joystickBaseX, touch.joystickBaseY,
+                    touch.joystickRadius, 0.25f, 0.25f, 0.3f, op * 0.60f);
+            drawCircle(mvp, tmp, touch.joystickCurrentX, touch.joystickCurrentY,
+                    touch.joystickRadius * 0.42f, 0.2f, 0.85f, 0.95f,
+                    touch.isJoystickActive ? Math.min(1.0f, op * 1.3f) : op * 0.75f);
+
+            // Light Attack
+            drawCircle(mvp, tmp, cl.btnLightX, cl.btnLightY, cl.btnLightRadius,
+                    1.0f, 0.45f, 0.20f, Math.min(1.0f, op * 1.25f));
+
+            // Heavy Attack
+            drawCircle(mvp, tmp, cl.btnHeavyX, cl.btnHeavyY, cl.btnHeavyRadius,
+                    0.92f, 0.15f, 0.18f, op);
+
+            // Block / Parry
+            drawCircle(mvp, tmp, cl.btnBlockX, cl.btnBlockY, cl.btnBlockRadius,
+                    0.20f, 0.70f, 0.95f, touch.blockPressed ? Math.min(1.0f, op * 1.4f) : op);
+
+            // Dodge Roll
+            drawCircle(mvp, tmp, cl.btnDodgeX, cl.btnDodgeY, cl.btnDodgeRadius,
+                    0.25f, 0.85f, 0.45f, op);
+
+            // Jump / Glider
+            drawCircle(mvp, tmp, cl.btnJumpX, cl.btnJumpY, cl.btnJumpRadius,
+                    0.35f, 0.65f, 1.0f, op);
+
+            // Weapon Switch
+            drawCircle(mvp, tmp, cl.btnWeaponSwitchX, cl.btnWeaponSwitchY, cl.btnWeaponSwitchRadius,
+                    0.95f, 0.75f, 0.15f, op * 0.90f);
+
+            // Qi Special Skill
+            drawCircle(mvp, tmp, cl.btnQiSkillX, cl.btnQiSkillY, cl.btnQiSkillRadius,
+                    0.75f, 0.30f, 0.95f, Math.min(1.0f, op * 1.2f));
+
+            // Lock-On Target
+            drawCircle(mvp, tmp, cl.btnLockOnX, cl.btnLockOnY, cl.btnLockOnRadius,
+                    0.30f, 0.80f, 0.85f, op * 0.85f);
+
+            // Sprint
+            drawCircle(mvp, tmp, cl.btnSprintX, cl.btnSprintY, cl.btnSprintRadius,
+                    player.isSprinting ? 1.0f : 0.4f, 0.3f, player.isSprinting ? 0.2f : 0.8f, op);
+
+            if (touch.btnInteractRadius > 0 && touch.interactVisible) {
+                drawCircle(mvp, tmp, cl.btnInteractX, cl.btnInteractY,
+                        cl.btnInteractRadius, 1.0f, 0.65f, 0.1f, Math.min(1.0f, op * 1.3f));
+            }
+            if (cl.btnMapRadius > 0) {
+                drawCircle(mvp, tmp, cl.btnMapX, cl.btnMapY, cl.btnMapRadius,
+                        0.20f, 0.75f, 0.90f, op * 0.85f);
+            }
+            if (cl.btnPauseRadius > 0) {
+                drawCircle(mvp, tmp, cl.btnPauseX, cl.btnPauseY, cl.btnPauseRadius,
+                        0.9f, 0.9f, 0.95f, op * 0.85f);
+            }
+        } else if (touch != null) {
             float op = touch.buttonOpacity;
             drawCircle(mvp, tmp, touch.joystickBaseX, touch.joystickBaseY,
                     touch.joystickRadius, 0.25f, 0.25f, 0.3f, op * 0.60f);

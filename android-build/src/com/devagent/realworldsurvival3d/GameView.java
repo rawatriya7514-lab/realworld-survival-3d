@@ -72,6 +72,14 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     public final Inventory inventory = new Inventory();
     public Vehicle activeVehicle = null;
 
+    // Wuxia Subsystem Entities & World (Phases 1-12)
+    public final WuxiaWorld wuxiaWorld = new WuxiaWorld();
+    public final ReputationSystem reputation = new ReputationSystem();
+    public final List<WuxiaEnemy> wuxiaEnemies = new ArrayList<>();
+    public final List<WuxiaNPC> wuxiaNPCs = new ArrayList<>();
+    public WuxiaEnemy activeBoss = null;
+    public final WuxiaCamera wuxiaCamera = new WuxiaCamera();
+
     // Phase 7: Environment (8-min Day/Night cycle, weather-lite & presets)
     public final DayNightCycle dayNight = new DayNightCycle();
 
@@ -326,6 +334,58 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
         audioManager.playMusic(MUSIC_MENU);
     }
 
+    /** Starts the Wuxia Open-World Action RPG mode with customized character & martial systems. */
+    public void startWuxiaMode(CharacterCustomization.Preset preset) {
+        startOpenWorld();
+        player.wuxiaMode = true;
+        touchInput.wuxiaControls = true;
+        player.customization.applyPreset(preset);
+
+        // Equip archetype weapons
+        switch (preset) {
+            case WANDERING_SWORDSMAN:
+                player.weapons.primaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.SWORD);
+                player.weapons.secondaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.BOW);
+                break;
+            case SHADOW_BLADE:
+                player.weapons.primaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.DUAL_BLADES);
+                player.weapons.secondaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.ROPE_DART);
+                break;
+            case MYSTIC_SCHOLAR:
+                player.weapons.primaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.FAN);
+                player.weapons.secondaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.SWORD);
+                break;
+            case DRAGON_VANGUARD:
+                player.weapons.primaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.GREATSWORD);
+                player.weapons.secondaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.SPEAR);
+                break;
+            case JADE_LOTUS_PRODIGY:
+                player.weapons.primaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.SPEAR);
+                player.weapons.secondaryWeapon = new WuxiaWeapon(WuxiaWeapon.WeaponType.UMBRELLA);
+                break;
+        }
+
+        missionTitle = "WUXIA: PATH OF THE WANDERING BLADE";
+        missionGoal = "Explore Jianghu, master martial arts, and face General Murong";
+
+        // Spawn Wuxia NPCs in the Ancient City, Bamboo Grove, Mountain Village
+        wuxiaNPCs.clear();
+        wuxiaNPCs.add(new WuxiaNPC(WuxiaNPC.Role.WANDERING_MASTER, 180f, 2.0f, 80f, 0f));
+        wuxiaNPCs.add(new WuxiaNPC(WuxiaNPC.Role.BLACKSMITH, 160f, 2.0f, 30f, 90f));
+        wuxiaNPCs.add(new WuxiaNPC(WuxiaNPC.Role.HERB_ALCHEMIST, 140f, 2.0f, 15f, -90f));
+        wuxiaNPCs.add(new WuxiaNPC(WuxiaNPC.Role.TEAHOUSE_MERCHANT, 250f, 3.5f, -230f, 45f));
+        wuxiaNPCs.add(new WuxiaNPC(WuxiaNPC.Role.CITY_GUARD, 150f, 2.0f, 50f, 180f));
+
+        // Spawn Wuxia Enemies & Boss
+        wuxiaEnemies.clear();
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.BASIC_FIGHTER, 190f, 2.0f, 110f));
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.FAST_ATTACKER, -260f, 8.0f, 140f));
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.HEAVY_ATTACKER, 20f, 2.0f, -40f));
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.DEFENSIVE_FIGHTER, 140f, 16.0f, -360f));
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.ELITE_FIGHTER, 130f, 17.0f, -370f));
+        wuxiaEnemies.add(new WuxiaEnemy(WuxiaEnemy.EnemyType.BOSS, 120f, 18.0f, -380f));
+    }
+
     private void updateOpenWorld(float dt) {
         // Sync map and routing state with touch input
         touchInput.mapOverlayVisible = mapOverlayVisible;
@@ -503,6 +563,91 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             if (oldState != HostileAI.State.DEFEATED && hostile.state == HostileAI.State.DEFEATED) {
                 missionManager.onHostileDefeated(hostile);
                 audioManager.playSfx(GameAudioManager.SFX_COMBAT_HIT);
+            }
+        }
+
+        // Wuxia Combat & Entities
+        if (player.wuxiaMode) {
+            // Combat inputs
+            if (touchInput.lightAttackPressed) {
+                player.combat.triggerLightAttack(player, player.weapons);
+            }
+            if (touchInput.heavyAttackPressed) {
+                player.combat.triggerHeavyAttack(player, player.weapons);
+            }
+            if (touchInput.blockPressed) {
+                player.combat.startBlock();
+            } else {
+                player.combat.releaseBlock();
+            }
+            if (touchInput.dodgePressed) {
+                player.combat.triggerDodge(player, player.vx, player.vz);
+            }
+            if (touchInput.weaponSwitchPressed) {
+                player.weapons.switchWeapon();
+            }
+            if (touchInput.qiSkillPressed) {
+                player.qiAbilities.castActiveSkill(player);
+            }
+
+            // Update Wuxia World & Fast Travel Shrines
+            wuxiaWorld.update(player.x, player.y, player.z);
+
+            // Update Wuxia Enemies & Combat Hitboxes
+            for (WuxiaEnemy e : wuxiaEnemies) {
+                e.update(dt, player);
+
+                // Player offensive hit detection
+                if (WuxiaCombatSystem.isAttackingState(player.combat.state) && e.state != WuxiaEnemy.State.DEFEATED) {
+                    float dx = e.x - player.x;
+                    float dz = e.z - player.z;
+                    float dist = (float) Math.sqrt(dx * dx + dz * dz);
+                    if (dist <= player.weapons.getActiveWeapon().getAttackRange()) {
+                        float dmg = player.weapons.getActiveWeapon().getDamage() * (1.0f + player.skillTree.getAttackDamageBonus());
+                        float guardDmg = player.weapons.getActiveWeapon().getGuardDamage();
+                        e.takeDamage(dmg * dt * 4.0f, guardDmg * dt * 4.0f);
+                        if (e.type == WuxiaEnemy.EnemyType.BOSS) {
+                            activeBoss = e;
+                        }
+                    }
+                }
+
+                // Enemy attack vs player parry / block / hit
+                if (e.state == WuxiaEnemy.State.ATTACKING && !e.attackConnected) {
+                    float dx = player.x - e.x;
+                    float dz = player.z - e.z;
+                    float dist = (float) Math.sqrt(dx * dx + dz * dz);
+                    if (dist <= 2.5f) {
+                        e.attackConnected = true;
+                        float incoming = e.type.attackDamage;
+                        float guard = e.type.guardDamage;
+                        float finalDmg = player.combat.onIncomingAttack(incoming, guard, player);
+                        if (player.combat.triggerParryVfx) {
+                            e.onParried();
+                            player.qiAbilities.siphonQi(25.0f);
+                            audioManager.playSfx(GameAudioManager.SFX_COMBAT_HIT);
+                        }
+                        if (finalDmg > 0f) {
+                            finalDmg = player.qiAbilities.absorbDamage(finalDmg);
+                            player.health = Math.max(0f, player.health - finalDmg);
+                            vibrate(80);
+                        }
+                    }
+                }
+            }
+
+            // Update Wuxia NPCs & Interactions
+            for (WuxiaNPC npc : wuxiaNPCs) {
+                npc.update(dt);
+                if (touchInput.interactPressed) {
+                    float dx = npc.x - player.x;
+                    float dz = npc.z - player.z;
+                    if (dx * dx + dz * dz < 3.5f * 3.5f) {
+                        String response = npc.interact(player, reputation);
+                        toastMessage = response;
+                        toastTimer = 3.5f;
+                    }
+                }
             }
         }
 
@@ -972,6 +1117,14 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
             s.inventorySlots.add(new SaveState.SlotEntry(slot.type.name(), slot.count));
         }
 
+        if (player.wuxiaMode) {
+            s.customizationStr = player.customization.serialize();
+            s.weaponsStr = player.weapons.serialize();
+            s.qiStr = player.qiAbilities.serialize();
+            s.skillTreeStr = player.skillTree.serialize();
+            s.reputationStr = reputation.serialize();
+        }
+
         saveManager.saveGameState(s);
 
         // Also write legacy keys for backward-compatibility
@@ -997,6 +1150,15 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
     @Override public void onStartOpenWorld() {
         if (ui != null) ui.showMenu(null);
         queue(new Runnable() { public void run() { startOpenWorld(); } });
+    }
+
+    @Override public void onStartWuxia(final CharacterCustomization.Preset preset) {
+        if (ui != null) ui.showMenu(null);
+        queue(new Runnable() { public void run() { startWuxiaMode(preset); } });
+    }
+
+    @Override public SkillTree getSkillTree() {
+        return player != null ? player.skillTree : null;
     }
 
     @Override public void onRetryActiveMode() {
@@ -1068,6 +1230,16 @@ public class GameView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
                         // Restore day/night clock
                         dayNight.timeOfDay = s.dayNightTime;
+
+                        if (s.customizationStr != null && !s.customizationStr.isEmpty()) {
+                            player.wuxiaMode = true;
+                            touchInput.wuxiaControls = true;
+                            player.customization.deserialize(s.customizationStr);
+                            player.weapons.deserialize(s.weaponsStr);
+                            player.qiAbilities.deserialize(s.qiStr);
+                            player.skillTree.deserialize(s.skillTreeStr);
+                            reputation.deserialize(s.reputationStr);
+                        }
                     } else { // PARKOUR
                         completedMissions = s.parkourCompletedMissions;
                         itemsCollected = s.itemsCollected;
